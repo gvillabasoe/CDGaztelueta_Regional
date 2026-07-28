@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply bg-marino;
+  }
+  body {
+    @apply font-sans text-negro antialiased;
+  }
+  input,
+  select,
+  textarea {
+    @apply font-sans;
+  }
+  /* Enfoque de teclado visible (accesibilidad) */
+  :focus-visible {
+    outline: 2px solid #c9a227;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-blanco shadow-card;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-gris;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-gris/30 bg-blanco px-3 py-2 text-sm text-negro placeholder:text-gris/60 focus:border-marino focus:outline-none;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-marino text-blanco hover:bg-marino/90;
+  }
+  .btn-gold {
+    @apply btn bg-dorado text-marino hover:bg-dorado/90;
+  }
+  .btn-ghost {
+    @apply btn border border-gris/30 bg-blanco text-marino hover:bg-beige;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-dorado;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

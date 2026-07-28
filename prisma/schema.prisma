@@ -1,0 +1,181 @@
+// CD Gaztelueta — esquema de datos
+// Modela ÚNICAMENTE los datos descritos en el prompt.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  COACH
+  PLAYER
+}
+
+enum CardType {
+  YELLOW
+  RED
+}
+
+enum MatchStatus {
+  SCHEDULED // programado
+  IN_PLAY // en juego
+  FINISHED // finalizado
+}
+
+// ── Usuarios y acceso ─────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String // hash bcrypt
+  role      Role
+  player    Player?
+  createdAt DateTime @default(now())
+}
+
+// ── Ficha del jugador (2.4) ───────────────────────────────────────
+model Player {
+  id        String   @id @default(cuid())
+  firstName String // Nombre
+  lastName  String // Apellidos
+  nickname  String? // Mote
+  number    Int? // Dorsal
+  age       Int? // Edad
+  isCaptain Boolean  @default(false) // ¿Capitán?
+  positions String[] // Posición / posiciones múltiples
+  photo     String? // Fotografía de ficha (data URL)
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  trainingEntries TrainingPlayer[]
+  matchEntries    MatchPlayer[]
+  goals           MatchGoal[]
+  cards           MatchCard[]
+  subsIn          Substitution[]   @relation("SubIn")
+  subsOut         Substitution[]   @relation("SubOut")
+  fines           Fine[]           @relation("FinePlayers")
+}
+
+// ── Liga: equipos y partidos de la clasificación / jornadas (2.2) ─
+model Team {
+  id          String        @id @default(cuid())
+  name        String
+  isOwn       Boolean       @default(false) // true = CD Gaztelueta
+  homeMatches LeagueMatch[] @relation("HomeTeam")
+  awayMatches LeagueMatch[] @relation("AwayTeam")
+}
+
+model LeagueMatch {
+  id         String      @id @default(cuid())
+  matchday   Int // Jornada
+  date       DateTime
+  status     MatchStatus @default(SCHEDULED)
+  homeTeamId String
+  awayTeamId String
+  homeGoals  Int?
+  awayGoals  Int?
+  homeTeam   Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+}
+
+// ── Registro de entrenamientos (2.3.1) ────────────────────────────
+model TrainingRecord {
+  id        String           @id @default(cuid())
+  date      DateTime
+  createdAt DateTime         @default(now())
+  players   TrainingPlayer[]
+  fines     Fine[]
+}
+
+model TrainingPlayer {
+  id            String         @id @default(cuid())
+  trainingId    String
+  playerId      String
+  attended      Boolean        @default(true) // ¿Ha asistido?
+  justified     Boolean? // Si no asiste: ¿justificada?
+  absenceReason String? // Motivo de la ausencia
+  grade         Float? // Nota individual (1-10, decimales)
+  observations  String? // Observaciones individuales
+  training      TrainingRecord @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  player        Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, playerId])
+}
+
+// ── Registro de partidos (2.3.2) ──────────────────────────────────
+model MatchRecord {
+  id                  String         @id @default(cuid())
+  date                DateTime
+  opponent            String // Rival
+  formation           String? // Formación utilizada
+  teamGoals           Int            @default(0) // Resultado (goles del equipo)
+  opponentGoals       Int            @default(0) // Resultado (goles del rival)
+  globalGrade         Float? // Nota global del equipo
+  generalObservations String? // Observaciones generales
+  createdAt           DateTime       @default(now())
+  players             MatchPlayer[]
+  goals               MatchGoal[]
+  substitutions       Substitution[]
+  cards               MatchCard[]
+  fines               Fine[]
+}
+
+model MatchPlayer {
+  id           String      @id @default(cuid())
+  matchId      String
+  playerId     String
+  isStarter    Boolean     @default(false) // Once titular
+  position     String? // Posición en la que ha jugado
+  grade        Float? // Nota individual del partido
+  observations String? // Observaciones individuales
+  match        MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player       Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+}
+
+model MatchGoal {
+  id       String      @id @default(cuid())
+  matchId  String
+  playerId String // Jugador que marca
+  minute   Int? // Minuto del gol
+  match    MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+model Substitution {
+  id          String      @id @default(cuid())
+  matchId     String
+  playerOutId String
+  playerInId  String
+  minute      Int?
+  match       MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerOut   Player      @relation("SubOut", fields: [playerOutId], references: [id], onDelete: Cascade)
+  playerIn    Player      @relation("SubIn", fields: [playerInId], references: [id], onDelete: Cascade)
+}
+
+model MatchCard {
+  id       String      @id @default(cuid())
+  matchId  String
+  playerId String
+  type     CardType // Amarilla / Roja
+  match    MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+// ── Multas (2.3.1 / 2.3.2) ────────────────────────────────────────
+model Fine {
+  id         String          @id @default(cuid())
+  amount     Float // Cantidad a pagar
+  reason     String // Motivo de la multa
+  trainingId String?
+  matchId    String?
+  createdAt  DateTime        @default(now())
+  training   TrainingRecord? @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  match      MatchRecord?    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  players    Player[]        @relation("FinePlayers") // uno o varios jugadores
+}
