@@ -10,7 +10,7 @@ import {
   Paperclip,
   CalendarDays,
   Dumbbell,
-  Goal,
+  Trophy,
 } from "lucide-react";
 import { Switch } from "@/components/Switch";
 import { DAY_NAMES, dateToIsoWeek } from "@/lib/week";
@@ -472,7 +472,7 @@ export function PlanEditor({
       {/* Ficha del partido */}
       <section className="card space-y-3 p-4">
         <div className="flex items-center gap-2">
-          <Goal size={16} className="text-marino" />
+          <Trophy size={16} className="text-marino" />
           <p className="eyebrow">Ficha del partido</p>
         </div>
 

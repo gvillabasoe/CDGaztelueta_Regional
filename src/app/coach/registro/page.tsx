@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   Plus,
   Dumbbell,
-  Goal,
+  Trophy,
   CalendarDays,
   Pencil,
   FileText,
@@ -130,14 +130,14 @@ export default async function RegistroPage() {
               className="flex flex-col items-center gap-2 rounded-2xl border-2 border-transparent bg-blanco px-4 py-5 font-semibold text-marino shadow-card"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-beige text-marino">
-                <Goal size={22} />
+                <Trophy size={22} />
               </span>
               Registrar partido
             </Link>
           ) : (
             <span className="flex cursor-not-allowed flex-col items-center gap-2 rounded-2xl border-2 border-transparent bg-blanco/60 px-4 py-5 font-semibold text-gris/50">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-beige/60">
-                <Goal size={22} />
+                <Trophy size={22} />
               </span>
               Registrar partido
             </span>
@@ -207,7 +207,7 @@ export default async function RegistroPage() {
                       className="card flex items-center justify-between gap-3 p-3"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <Goal size={16} className="shrink-0 text-marino" />
+                        <Trophy size={16} className="shrink-0 text-marino" />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-marino">
                             {r.dateLabel}

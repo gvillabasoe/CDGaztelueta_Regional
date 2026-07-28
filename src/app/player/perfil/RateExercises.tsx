@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, CheckCircle2, Save } from "lucide-react";
+import { Loader2, Check, Save } from "lucide-react";
 import { saveExerciseRatings } from "@/actions/rating";
 
 type Exercise = {
@@ -115,7 +115,7 @@ export function RateExercises({
         {saving ? (
           <Loader2 size={18} className="animate-spin" />
         ) : done ? (
-          <CheckCircle2 size={18} />
+          <Check size={18} />
         ) : (
           <Save size={18} />
         )}
