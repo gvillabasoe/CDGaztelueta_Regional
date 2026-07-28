@@ -58,6 +58,8 @@ model Player {
   subsIn          Substitution[]   @relation("SubIn")
   subsOut         Substitution[]   @relation("SubOut")
   fines           Fine[]           @relation("FinePlayers")
+  exerciseRatings ExerciseRating[]
+  matchCallups    MatchPlan[]      @relation("MatchCallup")
 }
 
 // ── Liga: equipos y partidos de la clasificación / jornadas (2.2) ─
@@ -84,11 +86,13 @@ model LeagueMatch {
 
 // ── Registro de entrenamientos (2.3.1) ────────────────────────────
 model TrainingRecord {
-  id        String           @id @default(cuid())
-  date      DateTime
-  createdAt DateTime         @default(now())
-  players   TrainingPlayer[]
-  fines     Fine[]
+  id                String           @id @default(cuid())
+  date              DateTime
+  createdAt         DateTime         @default(now())
+  plannedTrainingId String?          @unique // entrenamiento de la planificación (2.3 / 6)
+  plannedTraining   PlannedTraining? @relation(fields: [plannedTrainingId], references: [id], onDelete: SetNull)
+  players           TrainingPlayer[]
+  fines             Fine[]
 }
 
 model TrainingPlayer {
@@ -178,4 +182,74 @@ model Fine {
   training   TrainingRecord? @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   match      MatchRecord?    @relation(fields: [matchId], references: [id], onDelete: Cascade)
   players    Player[]        @relation("FinePlayers") // uno o varios jugadores
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  PLANIFICACIÓN SEMANAL (nuevo)
+// ════════════════════════════════════════════════════════════════════
+
+// Planificación de una semana (1). Una por semana.
+model WeeklyPlan {
+  id        String            @id @default(cuid())
+  weekStart DateTime          @unique // lunes de la semana planificada
+  fileData  Bytes? // archivo subido (3)
+  fileName  String?
+  fileMime  String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  trainings PlannedTraining[]
+  match     MatchPlan? // ficha del partido (4)
+}
+
+// Entrenamiento planificado dentro de la semana (2)
+model PlannedTraining {
+  id         String          @id @default(cuid())
+  planId     String
+  dayOfWeek  Int // 1=Lunes … 7=Domingo
+  time       String // "HH:MM"
+  orderIndex Int             @default(0)
+  createdAt  DateTime        @default(now())
+  plan       WeeklyPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  exercises  Exercise[]
+  record     TrainingRecord? // registro asociado (6)
+}
+
+// Ejercicio de un entrenamiento planificado (2)
+model Exercise {
+  id          String           @id @default(cuid())
+  trainingId  String
+  task        String // Tarea
+  description String? // Descripción de la tarea
+  objective   String? // Objetivo de la tarea
+  duration    String? // Duración
+  orderIndex  Int              @default(0)
+  training    PlannedTraining  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  ratings     ExerciseRating[]
+}
+
+// Valoración de un ejercicio por un jugador (8)
+model ExerciseRating {
+  id         String   @id @default(cuid())
+  exerciseId String
+  playerId   String
+  rating     Float // 1..10 con decimales
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, playerId])
+}
+
+// Ficha del partido dentro de la planificación (4)
+model MatchPlan {
+  id            String     @id @default(cuid())
+  planId        String     @unique
+  date          DateTime? // Fecha
+  place         String? // Lugar
+  time          String? // Hora
+  callTime      String? // Hora de convocatoria
+  kitLocal      Boolean    @default(true) // Equipación: true = Local, false = Visitante (4.1)
+  plan          WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  calledPlayers Player[]   @relation("MatchCallup") // Convocatoria, máx. 18 (4.2)
 }

@@ -2,38 +2,68 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Loader2, Save } from "lucide-react";
 import { Switch } from "@/components/Switch";
 import { FinesEditor } from "./FinesEditor";
-import { saveTraining } from "@/actions/training";
-import type { FineInput, PlayerLite, TrainingPlayerInput } from "@/lib/types";
+import { saveTraining, updateTraining } from "@/actions/training";
+import type {
+  FineInput,
+  PlayerLite,
+  TrainingPlayerInput,
+} from "@/lib/types";
 
 function playerName(p: PlayerLite) {
   const base = `${p.firstName} ${p.lastName}`;
   return p.nickname?.trim() ? `${p.nickname} · ${base}` : base;
 }
 
+function buildRows(
+  players: PlayerLite[],
+  initialPlayers?: TrainingPlayerInput[],
+): TrainingPlayerInput[] {
+  const byId = new Map(
+    (initialPlayers ?? []).map((p) => [p.playerId, p] as const),
+  );
+  return players.map((p) => {
+    const found = byId.get(p.id);
+    return found
+      ? { ...found }
+      : {
+          playerId: p.id,
+          attended: true,
+          justified: null,
+          absenceReason: null,
+          grade: null,
+          observations: null,
+        };
+  });
+}
+
 export function TrainingForm({
   players,
   today,
+  mode = "create",
+  plannedTrainingId,
+  recordId,
+  initial,
+  contextLabel,
 }: {
   players: PlayerLite[];
   today: string;
+  mode?: "create" | "edit";
+  plannedTrainingId?: string;
+  recordId?: string;
+  initial?: { date: string; players: TrainingPlayerInput[]; fines: FineInput[] };
+  contextLabel?: string;
 }) {
-  const [date, setDate] = useState(today);
+  const router = useRouter();
+  const [date, setDate] = useState(initial?.date ?? today);
   const [rows, setRows] = useState<TrainingPlayerInput[]>(
-    players.map((p) => ({
-      playerId: p.id,
-      attended: true,
-      justified: null,
-      absenceReason: null,
-      grade: null,
-      observations: null,
-    })),
+    buildRows(players, initial?.players),
   );
-  const [fines, setFines] = useState<FineInput[]>([]);
+  const [fines, setFines] = useState<FineInput[]>(initial?.fines ?? []);
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function patch(i: number, p: Partial<TrainingPlayerInput>) {
@@ -44,49 +74,33 @@ export function TrainingForm({
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const res = await saveTraining({ date, players: rows, fines });
+    const payload = {
+      date,
+      plannedTrainingId: mode === "edit" ? undefined : plannedTrainingId,
+      players: rows,
+      fines,
+    };
+    const res =
+      mode === "edit" && recordId
+        ? await updateTraining(recordId, payload)
+        : await saveTraining(payload);
     setSaving(false);
     if (res.ok) {
-      setDone(true);
+      router.push("/coach/registro");
+      router.refresh();
     } else {
       setError(res.error || "No se ha podido guardar.");
     }
   }
 
-  if (done) {
-    return (
-      <div className="card flex flex-col items-center gap-3 p-8 text-center">
-        <CheckCircle2 className="text-dorado" size={40} />
-        <p className="font-display text-xl text-marino">
-          Entrenamiento guardado
-        </p>
-        <button
-          type="button"
-          className="btn-ghost"
-          onClick={() => {
-            setDone(false);
-            setRows(
-              players.map((p) => ({
-                playerId: p.id,
-                attended: true,
-                justified: null,
-                absenceReason: null,
-                grade: null,
-                observations: null,
-              })),
-            );
-            setFines([]);
-            setDate(today);
-          }}
-        >
-          Registrar otro
-        </button>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={onSubmit} className="space-y-5">
+      {contextLabel && (
+        <div className="rounded-xl bg-marino px-4 py-3 text-sm text-beige">
+          {contextLabel}
+        </div>
+      )}
+
       <div className="card p-4">
         <label className="label" htmlFor="fecha-ent">
           Fecha
@@ -198,14 +212,27 @@ export function TrainingForm({
         <p className="rounded-lg bg-amarillo/25 px-3 py-2 text-sm">{error}</p>
       )}
 
-      <button
-        type="submit"
-        className="btn-primary w-full"
-        disabled={saving || players.length === 0}
-      >
-        {saving && <Loader2 size={18} className="animate-spin" />}
-        {saving ? "Guardando…" : "Guardar entrenamiento"}
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          className="btn-ghost flex-1"
+          onClick={() => router.push("/coach/registro")}
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className="btn-primary flex-1"
+          disabled={saving || players.length === 0}
+        >
+          {saving ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Save size={18} />
+          )}
+          {saving ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
     </form>
   );
 }

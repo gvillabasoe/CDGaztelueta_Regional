@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { Loader2, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Loader2, Plus, Trash2, Save } from "lucide-react";
 import { Switch } from "@/components/Switch";
 import { FinesEditor } from "./FinesEditor";
-import { saveMatch } from "@/actions/match";
+import { saveMatch, updateMatch } from "@/actions/match";
 import type {
   CardInput,
   FineInput,
@@ -20,63 +21,88 @@ function playerName(p: PlayerLite) {
   return p.nickname?.trim() ? `${p.nickname} · ${base}` : base;
 }
 
-function emptyRows(players: PlayerLite[]): MatchPlayerInput[] {
-  return players.map((p) => ({
-    playerId: p.id,
-    isStarter: false,
-    position: null,
-    grade: null,
-    observations: null,
-  }));
+function buildRows(
+  players: PlayerLite[],
+  initialPlayers?: MatchPlayerInput[],
+): MatchPlayerInput[] {
+  const byId = new Map(
+    (initialPlayers ?? []).map((p) => [p.playerId, p] as const),
+  );
+  return players.map((p) => {
+    const f = byId.get(p.id);
+    return f
+      ? { ...f }
+      : {
+          playerId: p.id,
+          isStarter: false,
+          position: null,
+          grade: null,
+          observations: null,
+        };
+  });
 }
+
+type MatchInitial = {
+  date: string;
+  opponent: string;
+  formation: string | null;
+  teamGoals: number;
+  opponentGoals: number;
+  globalGrade: number | null;
+  generalObservations: string | null;
+  players: MatchPlayerInput[];
+  goals: GoalInput[];
+  substitutions: SubInput[];
+  cards: CardInput[];
+  fines: FineInput[];
+};
 
 export function MatchForm({
   players,
   today,
+  mode = "create",
+  recordId,
+  initial,
 }: {
   players: PlayerLite[];
   today: string;
+  mode?: "create" | "edit";
+  recordId?: string;
+  initial?: MatchInitial;
 }) {
-  const [date, setDate] = useState(today);
-  const [opponent, setOpponent] = useState("");
-  const [formation, setFormation] = useState("");
-  const [teamGoals, setTeamGoals] = useState(0);
-  const [opponentGoals, setOpponentGoals] = useState(0);
-  const [rows, setRows] = useState<MatchPlayerInput[]>(emptyRows(players));
-  const [goals, setGoals] = useState<GoalInput[]>([]);
-  const [subs, setSubs] = useState<SubInput[]>([]);
-  const [cards, setCards] = useState<CardInput[]>([]);
-  const [globalGrade, setGlobalGrade] = useState<number | null>(null);
-  const [generalObs, setGeneralObs] = useState("");
-  const [fines, setFines] = useState<FineInput[]>([]);
+  const router = useRouter();
+  const [date, setDate] = useState(initial?.date ?? today);
+  const [opponent, setOpponent] = useState(initial?.opponent ?? "");
+  const [formation, setFormation] = useState(initial?.formation ?? "");
+  const [teamGoals, setTeamGoals] = useState(initial?.teamGoals ?? 0);
+  const [opponentGoals, setOpponentGoals] = useState(
+    initial?.opponentGoals ?? 0,
+  );
+  const [rows, setRows] = useState<MatchPlayerInput[]>(
+    buildRows(players, initial?.players),
+  );
+  const [goals, setGoals] = useState<GoalInput[]>(initial?.goals ?? []);
+  const [subs, setSubs] = useState<SubInput[]>(initial?.substitutions ?? []);
+  const [cards, setCards] = useState<CardInput[]>(initial?.cards ?? []);
+  const [globalGrade, setGlobalGrade] = useState<number | null>(
+    initial?.globalGrade ?? null,
+  );
+  const [generalObs, setGeneralObs] = useState(
+    initial?.generalObservations ?? "",
+  );
+  const [fines, setFines] = useState<FineInput[]>(initial?.fines ?? []);
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function patchRow(i: number, p: Partial<MatchPlayerInput>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
   }
 
-  function reset() {
-    setDate(today);
-    setOpponent("");
-    setFormation("");
-    setTeamGoals(0);
-    setOpponentGoals(0);
-    setRows(emptyRows(players));
-    setGoals([]);
-    setSubs([]);
-    setCards([]);
-    setGlobalGrade(null);
-    setGeneralObs("");
-    setFines([]);
-  }
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const res = await saveMatch({
+    const payload = {
       date,
       opponent,
       formation: formation || null,
@@ -89,29 +115,18 @@ export function MatchForm({
       substitutions: subs,
       cards,
       fines,
-    });
+    };
+    const res =
+      mode === "edit" && recordId
+        ? await updateMatch(recordId, payload)
+        : await saveMatch(payload);
     setSaving(false);
-    if (res.ok) setDone(true);
-    else setError(res.error || "No se ha podido guardar.");
-  }
-
-  if (done) {
-    return (
-      <div className="card flex flex-col items-center gap-3 p-8 text-center">
-        <CheckCircle2 className="text-dorado" size={40} />
-        <p className="font-display text-xl text-marino">Partido guardado</p>
-        <button
-          type="button"
-          className="btn-ghost"
-          onClick={() => {
-            setDone(false);
-            reset();
-          }}
-        >
-          Registrar otro
-        </button>
-      </div>
-    );
+    if (res.ok) {
+      router.push("/coach/registro");
+      router.refresh();
+    } else {
+      setError(res.error || "No se ha podido guardar.");
+    }
   }
 
   const noPlayers = players.length === 0;
@@ -198,7 +213,7 @@ export function MatchForm({
         </p>
       ) : (
         <>
-          {/* Jugadores: once titular, posición, nota, observaciones */}
+          {/* Jugadores */}
           <div className="space-y-3">
             <p className="eyebrow">Jugadores</p>
             {rows.map((row, i) => (
@@ -340,10 +355,7 @@ export function MatchForm({
           <div className="card space-y-3 p-4">
             <p className="eyebrow">Cambios</p>
             {subs.map((s, i) => (
-              <div
-                key={i}
-                className="space-y-2 rounded-xl bg-beige/40 p-3"
-              >
+              <div key={i} className="space-y-2 rounded-xl bg-beige/40 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wide text-gris">
                     Cambio {i + 1}
@@ -509,17 +521,14 @@ export function MatchForm({
               type="button"
               className="btn-ghost w-full"
               onClick={() =>
-                setCards((prev) => [
-                  ...prev,
-                  { playerId: "", type: "YELLOW" },
-                ])
+                setCards((prev) => [...prev, { playerId: "", type: "YELLOW" }])
               }
             >
               <Plus size={16} /> Añadir tarjeta
             </button>
           </div>
 
-          {/* Nota global y observaciones generales */}
+          {/* Nota global y observaciones */}
           <div className="card space-y-3 p-4">
             <div>
               <span className="label">Nota global del equipo (1-10)</span>
@@ -560,14 +569,27 @@ export function MatchForm({
         <p className="rounded-lg bg-amarillo/25 px-3 py-2 text-sm">{error}</p>
       )}
 
-      <button
-        type="submit"
-        className="btn-primary w-full"
-        disabled={saving || noPlayers}
-      >
-        {saving && <Loader2 size={18} className="animate-spin" />}
-        {saving ? "Guardando…" : "Guardar partido"}
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          className="btn-ghost flex-1"
+          onClick={() => router.push("/coach/registro")}
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className="btn-primary flex-1"
+          disabled={saving || noPlayers}
+        >
+          {saving ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Save size={18} />
+          )}
+          {saving ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
     </form>
   );
 }

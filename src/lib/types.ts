@@ -26,6 +26,7 @@ export type TrainingPlayerInput = {
 
 export type SaveTrainingInput = {
   date: string;
+  plannedTrainingId?: string | null;
   players: TrainingPlayerInput[];
   fines: FineInput[];
 };
@@ -72,4 +73,50 @@ export type CreatePlayerInput = {
   photo: string | null;
   username: string;
   password: string;
+};
+
+// ── Planificación semanal ─────────────────────────────────────────
+
+export type PlanExerciseInput = {
+  id?: string; // presente al editar
+  task: string;
+  description: string | null;
+  objective: string | null;
+  duration: string | null;
+};
+
+export type PlanTrainingInput = {
+  id?: string; // presente al editar
+  dayOfWeek: number; // 1..7
+  time: string; // "HH:MM"
+  exercises: PlanExerciseInput[];
+};
+
+export type PlanMatchInput = {
+  date: string | null; // "yyyy-mm-dd"
+  place: string | null;
+  time: string | null; // "HH:MM"
+  callTime: string | null; // "HH:MM"
+  kitLocal: boolean; // true = Local, false = Visitante
+  calledPlayerIds: string[]; // máx. 18
+};
+
+export type PlanFileInput = {
+  name: string;
+  mime: string;
+  dataBase64: string; // base64 sin el prefijo "data:...;base64,"
+};
+
+export type PlanInput = {
+  week: string; // "YYYY-Www"
+  trainings: PlanTrainingInput[];
+  match: PlanMatchInput;
+  file: PlanFileInput | null; // null = no cambiar / no adjuntar
+};
+
+// ── Valoración de ejercicios por el jugador ───────────────────────
+
+export type ExerciseRatingInput = {
+  exerciseId: string;
+  rating: number; // 1..10
 };
