@@ -1,183 +1,122 @@
-import { PrismaClient, MatchStatus } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-function daysFromNow(d: number, hour = 11): Date {
-  const date = new Date();
-  date.setDate(date.getDate() + d);
-  date.setHours(hour, 0, 0, 0);
-  return date;
-}
-
-function mondayOf(input: Date): Date {
-  const x = new Date(input);
-  const dow = (x.getDay() + 6) % 7; // 0 = lunes
-  x.setDate(x.getDate() - dow);
+function mondayOf(d: Date) {
+  const x = new Date(d);
+  const day = (x.getDay() + 6) % 7; // 0 = lunes
+  x.setDate(x.getDate() - day);
   x.setHours(0, 0, 0, 0);
+  return x;
+}
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
   return x;
 }
 
 async function main() {
-  console.log("Limpiando datos anteriores…");
+  // Limpieza (hijos -> padres)
   await prisma.exerciseRating.deleteMany();
-  await prisma.fine.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.trainingPlayer.deleteMany();
+  await prisma.trainingRecord.deleteMany();
   await prisma.matchGoal.deleteMany();
   await prisma.substitution.deleteMany();
   await prisma.matchCard.deleteMany();
   await prisma.matchPlayer.deleteMany();
   await prisma.matchRecord.deleteMany();
-  await prisma.trainingPlayer.deleteMany();
-  await prisma.trainingRecord.deleteMany();
   await prisma.exercise.deleteMany();
-  await prisma.plannedTraining.deleteMany();
-  await prisma.matchPlan.deleteMany();
+  await prisma.activity.deleteMany();
   await prisma.weeklyPlan.deleteMany();
-  await prisma.leagueMatch.deleteMany();
+  await prisma.fine.deleteMany();
+  await prisma.proposal.deleteMany();
+  await prisma.officialStanding.deleteMany();
+  await prisma.nextMatch.deleteMany();
+  await prisma.teamProfile.deleteMany();
   await prisma.player.deleteMany();
   await prisma.user.deleteMany();
-  await prisma.team.deleteMany();
 
-  // ── Cuerpo técnico (usuarios entrenador) ────────────────────────
-  console.log("Creando cuerpo técnico…");
-  await prisma.user.create({
+  // Club
+  await prisma.teamProfile.create({
     data: {
-      username: "igomeza30",
-      password: await bcrypt.hash("mister", 10),
-      role: "COACH",
-    },
-  });
-  await prisma.user.create({
-    data: {
-      username: "diegozumarraga",
-      password: await bcrypt.hash("2mister", 10),
-      role: "COACH",
+      id: 1,
+      name: "CD Gaztelueta",
+      info: "Equipo del CD Gaztelueta. Nuestro sea, nuestro sea.",
     },
   });
 
-  // ── Equipos de la liga ──────────────────────────────────────────
-  console.log("Creando equipos…");
-  const own = await prisma.team.create({
-    data: { name: "CD Gaztelueta", isOwn: true },
-  });
-  const rivalNames = [
-    "Athletic Club B",
-    "Getxo FT",
-    "Areeta FC",
-    "Deusto SC",
-    "Santurtzi CD",
-  ];
-  const rivals = [];
-  for (const name of rivalNames) {
-    rivals.push(await prisma.team.create({ data: { name } }));
-  }
-  const teams = [own, ...rivals];
-
-  // ── Jornadas / partidos de liga ─────────────────────────────────
-  console.log("Creando jornadas…");
-  type Fx = [number, number, number | null, number | null];
-  const schedule: {
-    matchday: number;
-    date: Date;
-    status: MatchStatus;
-    fixtures: Fx[];
-  }[] = [
-    {
+  // Próximo partido
+  const now = new Date();
+  const monday = mondayOf(now);
+  await prisma.nextMatch.create({
+    data: {
+      id: 1,
       matchday: 1,
-      date: daysFromNow(-21),
-      status: "FINISHED",
-      fixtures: [
-        [0, 1, 2, 1],
-        [2, 3, 1, 1],
-        [4, 5, 0, 2],
-      ],
+      date: addDays(monday, 6),
+      time: "17:00",
+      opponent: "CD Rival",
+      place: "Campo Municipal",
+      isHome: true,
     },
-    {
-      matchday: 2,
-      date: daysFromNow(-14),
-      status: "FINISHED",
-      fixtures: [
-        [0, 2, 3, 0],
-        [1, 3, 2, 2],
-        [4, 5, 1, 1],
-      ],
-    },
-    {
-      matchday: 3,
-      date: daysFromNow(-7),
-      status: "FINISHED",
-      fixtures: [
-        [0, 4, 1, 1],
-        [1, 5, 0, 1],
-        [2, 3, 2, 0],
-      ],
-    },
-    {
-      matchday: 4,
-      date: daysFromNow(3),
-      status: "SCHEDULED",
-      fixtures: [
-        [0, 5, null, null],
-        [1, 4, null, null],
-        [2, 3, null, null],
-      ],
-    },
-    {
-      matchday: 5,
-      date: daysFromNow(10),
-      status: "SCHEDULED",
-      fixtures: [
-        [0, 1, null, null],
-        [2, 4, null, null],
-        [3, 5, null, null],
-      ],
-    },
-  ];
+  });
 
-  for (const jornada of schedule) {
-    for (const [h, a, hg, ag] of jornada.fixtures) {
-      await prisma.leagueMatch.create({
-        data: {
-          matchday: jornada.matchday,
-          date: jornada.date,
-          status: jornada.status,
-          homeTeamId: teams[h].id,
-          awayTeamId: teams[a].id,
-          homeGoals: hg,
-          awayGoals: ag,
-        },
-      });
-    }
-  }
+  // Entrenadores
+  const misterHash = await bcrypt.hash("mister", 10);
+  const mister2Hash = await bcrypt.hash("2mister", 10);
+  await prisma.user.create({
+    data: { username: "igomeza30", password: misterHash, role: "COACH" },
+  });
+  await prisma.user.create({
+    data: { username: "diegozumarraga", password: mister2Hash, role: "COACH" },
+  });
 
-  // ── Jugadores + credenciales ────────────────────────────────────
-  console.log("Creando jugadores…");
-  const playersData = [
-    { firstName: "Iker", lastName: "Etxeberria", nickname: "Iker", number: 1, age: 17, isCaptain: false, positions: ["Portero"], username: "iker" },
-    { firstName: "Ander", lastName: "Muñoz", nickname: "Ander", number: 2, age: 16, isCaptain: false, positions: ["Lateral derecho"], username: "ander" },
-    { firstName: "Unai", lastName: "Agirre", nickname: "Unai", number: 4, age: 17, isCaptain: true, positions: ["Defensa central"], username: "unai" },
-    { firstName: "Jon", lastName: "Zubizarreta", nickname: "Zubi", number: 6, age: 16, isCaptain: false, positions: ["Mediocentro", "Interior"], username: "zubi" },
-    { firstName: "Gorka", lastName: "Iparragirre", nickname: "Gorka", number: 8, age: 17, isCaptain: false, positions: ["Interior"], username: "gorka" },
-    { firstName: "Mikel", lastName: "Garmendia", nickname: "Garmen", number: 9, age: 17, isCaptain: false, positions: ["Delantero"], username: "mikel" },
-    { firstName: "Aitor", lastName: "Lorea", nickname: "Aitor", number: 11, age: 16, isCaptain: false, positions: ["Extremo", "Segundo delantero"], username: "aitor" },
+  // Jugadores de ejemplo
+  const playerHash = await bcrypt.hash("gazte1234", 10);
+  const demo: {
+    username: string;
+    firstName: string;
+    lastName: string;
+    nickname?: string;
+    number: number;
+    age: number;
+    isCaptain?: boolean;
+    positions: string[];
+    leaguePoints: number;
+    stats: [number, number, number, number, number]; // callups, minutes, starts, bench, goals
+  }[] = [
+    { username: "jugador1", firstName: "Aitor", lastName: "Etxeberria", nickname: "Etxe", number: 1, age: 17, positions: ["Portero"], leaguePoints: 8, stats: [10, 900, 10, 0, 0] },
+    { username: "jugador2", firstName: "Mikel", lastName: "Agirre", number: 4, age: 16, isCaptain: true, positions: ["Defensa central"], leaguePoints: 14, stats: [11, 980, 11, 0, 1] },
+    { username: "jugador3", firstName: "Jon", lastName: "Beristain", number: 6, age: 17, positions: ["Mediocentro", "Interior"], leaguePoints: 11, stats: [9, 720, 7, 2, 2] },
+    { username: "jugador4", firstName: "Unai", lastName: "Larrañaga", nickname: "Larra", number: 8, age: 16, positions: ["Centrocampista"], leaguePoints: 6, stats: [8, 540, 5, 3, 1] },
+    { username: "jugador5", firstName: "Iker", lastName: "Zubizarreta", number: 10, age: 17, positions: ["Extremo", "Interior"], leaguePoints: 17, stats: [12, 1010, 12, 0, 7] },
+    { username: "jugador6", firstName: "Ander", lastName: "Goikoetxea", number: 9, age: 16, positions: ["Delantero"], leaguePoints: 12, stats: [12, 860, 9, 3, 9] },
+    { username: "jugador7", firstName: "Julen", lastName: "Arrieta", number: 2, age: 16, positions: ["Lateral"], leaguePoints: 5, stats: [7, 480, 4, 3, 0] },
   ];
 
   const players = [];
-  for (const p of playersData) {
+  for (const d of demo) {
     const user = await prisma.user.create({
       data: {
-        username: p.username,
-        password: await bcrypt.hash("gazte1234", 10),
+        username: d.username,
+        password: playerHash,
         role: "PLAYER",
         player: {
           create: {
-            firstName: p.firstName,
-            lastName: p.lastName,
-            nickname: p.nickname,
-            number: p.number,
-            age: p.age,
-            isCaptain: p.isCaptain,
-            positions: p.positions,
+            firstName: d.firstName,
+            lastName: d.lastName,
+            nickname: d.nickname ?? null,
+            number: d.number,
+            age: d.age,
+            isCaptain: d.isCaptain ?? false,
+            positions: d.positions,
+            leaguePoints: d.leaguePoints,
+            callups: d.stats[0],
+            minutes: d.stats[1],
+            starts: d.stats[2],
+            benchCount: d.stats[3],
+            goalsCount: d.stats[4],
           },
         },
       },
@@ -186,179 +125,98 @@ async function main() {
     if (user.player) players.push(user.player);
   }
 
-  // ── Entrenamientos con notas (histórico) ────────────────────────
-  console.log("Creando entrenamientos (histórico)…");
-  const trainingGrades1 = [7.5, 6.0, 8.0, 7.0, 6.5, 8.5, 7.0];
-  const trainingGrades2 = [8.0, 6.5, 7.5, 7.5, 7.0, 8.0, 6.0];
-
-  await prisma.trainingRecord.create({
-    data: {
-      date: daysFromNow(-5),
-      players: {
-        create: players.map((pl, i) => ({
-          playerId: pl.id,
-          attended: i !== 4,
-          justified: i === 4 ? true : null,
-          absenceReason: i === 4 ? "Motivos médicos" : null,
-          grade: i === 4 ? null : trainingGrades1[i],
-          observations: null,
-        })),
-      },
-      fines: {
-        create: [
-          {
-            amount: 5,
-            reason: "Llegar tarde al entrenamiento",
-            players: { connect: [{ id: players[1].id }] },
-          },
-        ],
-      },
-    },
+  // Clasificación oficial
+  await prisma.officialStanding.createMany({
+    data: [
+      { teamName: "CD Gaztelueta", played: 3, won: 2, drawn: 1, lost: 0, goalsFor: 7, goalsAgainst: 2, points: 7 },
+      { teamName: "CD Rival", played: 3, won: 2, drawn: 0, lost: 1, goalsFor: 6, goalsAgainst: 4, points: 6 },
+      { teamName: "Club Atlético Norte", played: 3, won: 1, drawn: 1, lost: 1, goalsFor: 4, goalsAgainst: 4, points: 4 },
+      { teamName: "Deportivo Sur", played: 3, won: 0, drawn: 1, lost: 2, goalsFor: 2, goalsAgainst: 5, points: 1 },
+    ],
   });
 
-  await prisma.trainingRecord.create({
-    data: {
-      date: daysFromNow(-2),
-      players: {
-        create: players.map((pl, i) => ({
-          playerId: pl.id,
-          attended: true,
-          justified: null,
-          absenceReason: null,
-          grade: trainingGrades2[i],
-          observations: null,
-        })),
-      },
-    },
-  });
-
-  // ── Partido con notas, goles, cambio, tarjeta y multa ───────────
-  console.log("Creando partido (histórico)…");
-  const matchGrades = [7.0, 6.5, 8.0, 7.5, 6.0, 8.5, 7.0];
-  await prisma.matchRecord.create({
-    data: {
-      date: daysFromNow(-7),
-      opponent: "Areeta FC",
-      formation: "4-3-3",
-      teamGoals: 3,
-      opponentGoals: 1,
-      globalGrade: 7.5,
-      generalObservations: "Buen partido, dominamos la segunda parte.",
-      players: {
-        create: players.map((pl, i) => ({
-          playerId: pl.id,
-          isStarter: i < 6,
-          position: pl.positions[0] ?? null,
-          grade: matchGrades[i],
-          observations: null,
-        })),
-      },
-      goals: {
-        create: [
-          { playerId: players[5].id, minute: 23 },
-          { playerId: players[5].id, minute: 58 },
-          { playerId: players[6].id, minute: 74 },
-        ],
-      },
-      substitutions: {
-        create: [
-          { playerOutId: players[4].id, playerInId: players[6].id, minute: 65 },
-        ],
-      },
-      cards: {
-        create: [{ playerId: players[2].id, type: "YELLOW" }],
-      },
-      fines: {
-        create: [
-          {
-            amount: 10,
-            reason: "Tarjeta por protestar",
-            players: { connect: [{ id: players[2].id }] },
-          },
-        ],
-      },
-    },
-  });
-
-  // ── Planificación semanal de ejemplo (semana actual) ────────────
-  console.log("Creando planificación semanal de ejemplo…");
-  const weekStart = mondayOf(new Date());
-  const matchDay = new Date(weekStart);
-  matchDay.setDate(weekStart.getDate() + 5); // sábado
-  matchDay.setHours(0, 0, 0, 0);
-
+  // Planificación de la semana actual (publicada)
+  const calledIds = players.slice(0, Math.min(18, players.length)).map((p) => ({ id: p.id }));
   await prisma.weeklyPlan.create({
     data: {
-      weekStart,
-      trainings: {
+      weekStart: monday,
+      published: true,
+      activities: {
         create: [
           {
-            dayOfWeek: 2, // Martes
-            time: "18:00",
+            type: "TRAINING",
+            date: addDays(monday, 1),
+            startTime: "20:30",
+            endTime: "22:00",
+            place: "Campo Gaztelueta",
             orderIndex: 0,
             exercises: {
               create: [
-                {
-                  task: "Rondos 4v2",
-                  description: "Dos rondos simultáneos con dos comodines.",
-                  objective: "Circulación rápida y presión tras pérdida.",
-                  duration: "15 min",
-                  orderIndex: 0,
-                },
-                {
-                  task: "Salida de balón",
-                  description: "Construcción desde portero con dos pivotes.",
-                  objective: "Progresar superando la primera línea de presión.",
-                  duration: "25 min",
-                  orderIndex: 1,
-                },
+                { task: "Rondo 4x2", description: "Dos toques máximo.", objective: "Circulación rápida", duration: "15 min", orderIndex: 0 },
+                { task: "Salida de balón", description: "Desde portero.", objective: "Construir desde atrás", duration: "20 min", orderIndex: 1 },
+                { task: "Partido reducido", objective: "Transiciones", duration: "25 min", orderIndex: 2 },
               ],
             },
           },
           {
-            dayOfWeek: 4, // Jueves
-            time: "18:00",
+            type: "TRAINING",
+            date: addDays(monday, 3),
+            startTime: "20:30",
+            endTime: "22:00",
+            place: "Campo Gaztelueta",
             orderIndex: 1,
             exercises: {
               create: [
-                {
-                  task: "Finalización",
-                  description: "Series de definición desde banda y centro.",
-                  objective: "Mejorar la eficacia de cara a portería.",
-                  duration: "20 min",
-                  orderIndex: 0,
-                },
-                {
-                  task: "Partido reducido",
-                  description: "7v7 en medio campo con porterías.",
-                  objective: "Aplicar lo trabajado en contexto real.",
-                  duration: "30 min",
-                  orderIndex: 1,
-                },
+                { task: "Finalización", objective: "Definición en área", duration: "20 min", orderIndex: 0 },
+                { task: "Estrategia a balón parado", objective: "Córners", duration: "15 min", orderIndex: 1 },
               ],
             },
           },
-        ],
-      },
-      match: {
-        create: {
-          date: matchDay,
-          place: "Campo de Gaztelueta",
-          time: "12:00",
-          callTime: "11:00",
-          kitLocal: true,
-          calledPlayers: {
-            connect: players.slice(0, 7).map((pl) => ({ id: pl.id })),
+          {
+            type: "MATCH",
+            date: addDays(monday, 6),
+            startTime: "17:00",
+            callTime: "16:00",
+            place: "Campo Municipal",
+            opponent: "CD Rival",
+            matchday: 1,
+            kitLocal: true,
+            orderIndex: 2,
+            calledPlayers: { connect: calledIds },
           },
-        },
+        ],
       },
     },
   });
 
-  console.log("\n✅ Seed completado.");
-  console.log("   Entrenador principal → usuario: igomeza30       contraseña: mister");
-  console.log("   Segundo entrenador   → usuario: diegozumarraga  contraseña: 2mister");
-  console.log("   Jugador              → usuario: unai            contraseña: gazte1234");
+  // Multas de ejemplo (mes actual y anterior, estados variados)
+  if (players.length >= 3) {
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 5);
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 12);
+    await prisma.fine.createMany({
+      data: [
+        { playerId: players[0].id, date: thisMonth, concept: "Llegar tarde al entrenamiento", amount: 5, paid: false },
+        { playerId: players[1].id, date: thisMonth, concept: "Móvil en la charla", amount: 3, paid: true },
+        { playerId: players[2].id, date: prevMonth, concept: "Falta injustificada", amount: 10, paid: false },
+      ],
+    });
+  }
+
+  // Propuesta de ejemplo
+  if (players.length > 0) {
+    await prisma.proposal.create({
+      data: {
+        playerId: players[0].id,
+        title: "Cena de equipo",
+        message: "Propongo una cena el próximo viernes para celebrar el buen inicio de temporada.",
+        status: "PENDIENTE",
+      },
+    });
+  }
+
+  console.log("✅ Datos iniciales creados.");
+  console.log("Entrenadores: igomeza30 / mister  ·  diegozumarraga / 2mister");
+  console.log("Jugadores de ejemplo: jugador1 … jugador7  ·  contraseña: gazte1234");
 }
 
 main()

@@ -3,6 +3,5 @@ import { getSession } from "@/lib/session";
 
 export default async function IndexPage() {
   const session = await getSession();
-  if (!session) redirect("/login");
-  redirect(session.role === "COACH" ? "/coach/home" : "/player/home");
+  redirect(session ? "/home" : "/login");
 }

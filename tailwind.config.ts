@@ -1,9 +1,12 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Paleta de colores EXCLUSIVA solicitada en el prompt:
+ * Paleta principal solicitada en el prompt:
  * Blanco, Beige, Dorado, Amarillo, Azul marino, Gris, Negro.
- * No se usa ningún color fuera de esta lista.
+ * Se usa además el verde/rojo estándar de Tailwind únicamente para los
+ * estados que el propio prompt describe con esos colores (asistencia
+ * "SÍ/NO" y multas "Pagado/Pendiente"). Al usar theme.extend, la paleta
+ * estándar de Tailwind sigue disponible junto a estos colores propios.
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],

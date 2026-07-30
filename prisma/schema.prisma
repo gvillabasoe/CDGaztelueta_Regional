@@ -20,10 +20,31 @@ enum CardType {
   RED
 }
 
-enum MatchStatus {
-  SCHEDULED // programado
-  IN_PLAY // en juego
-  FINISHED // finalizado
+enum ActivityType {
+  TRAINING
+  MATCH
+}
+
+enum AttendanceStatus {
+  GOING // SÍ, ASISTIRÉ
+  NOT_GOING // NO ASISTIRÉ
+}
+
+enum AbsenceReason {
+  LESION
+  ENFERMEDAD
+  TRABAJO
+  ESTUDIOS
+  VIAJE
+  FAMILIAR
+  OTRO
+}
+
+enum ProposalStatus {
+  PENDIENTE
+  EN_REVISION
+  ACEPTADA
+  RECHAZADA
 }
 
 // ── Usuarios y acceso ─────────────────────────────────────────────
@@ -36,203 +57,138 @@ model User {
   createdAt DateTime @default(now())
 }
 
-// ── Ficha del jugador (2.4) ───────────────────────────────────────
+// ── Ficha del jugador (7) ─────────────────────────────────────────
 model Player {
   id        String   @id @default(cuid())
-  firstName String // Nombre
-  lastName  String // Apellidos
-  nickname  String? // Mote
-  number    Int? // Dorsal
-  age       Int? // Edad
-  isCaptain Boolean  @default(false) // ¿Capitán?
-  positions String[] // Posición / posiciones múltiples
-  photo     String? // Fotografía de ficha (data URL)
+  firstName String
+  lastName  String
+  nickname  String?
+  number    Int?
+  age       Int?
+  isCaptain Boolean  @default(false)
+  positions String[]
+  photo     String? // data URL
   userId    String?  @unique
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 
+  // Estadísticas deportivas (manuales, 7.2)
+  callups     Int @default(0) // convocatorias
+  minutes     Int @default(0) // minutos jugados
+  starts      Int @default(0) // titularidades
+  benchCount  Int @default(0) // suplencias
+  goalsCount  Int @default(0) // goles marcados
+  leaguePoints Int @default(0) // liga interna (6)
+
+  attendance      Attendance[]
+  exerciseRatings ExerciseRating[]
+  calledFor       Activity[]       @relation("Callup")
+  fines           Fine[]
+  proposals       Proposal[]
   trainingEntries TrainingPlayer[]
   matchEntries    MatchPlayer[]
   goals           MatchGoal[]
   cards           MatchCard[]
   subsIn          Substitution[]   @relation("SubIn")
   subsOut         Substitution[]   @relation("SubOut")
-  fines           Fine[]           @relation("FinePlayers")
-  exerciseRatings ExerciseRating[]
-  matchCallups    MatchPlan[]      @relation("MatchCallup")
 }
 
-// ── Liga: equipos y partidos de la clasificación / jornadas (2.2) ─
-model Team {
-  id          String        @id @default(cuid())
-  name        String
-  isOwn       Boolean       @default(false) // true = CD Gaztelueta
-  homeMatches LeagueMatch[] @relation("HomeTeam")
-  awayMatches LeagueMatch[] @relation("AwayTeam")
+// ── Datos generales del club (1) ──────────────────────────────────
+model TeamProfile {
+  id        Int      @id @default(1) // fila única
+  name      String   @default("CD Gaztelueta")
+  info      String? // información general
+  crestData Bytes? // escudo personalizado (si no, se usa /escudo.jpg)
+  crestMime String?
+  photoData Bytes? // fotografía de la plantilla
+  photoMime String?
+  updatedAt DateTime @updatedAt
 }
 
-model LeagueMatch {
-  id         String      @id @default(cuid())
-  matchday   Int // Jornada
-  date       DateTime
-  status     MatchStatus @default(SCHEDULED)
-  homeTeamId String
-  awayTeamId String
-  homeGoals  Int?
-  awayGoals  Int?
-  homeTeam   Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam   Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+// ── Próximo partido de liga (5.1) ─────────────────────────────────
+model NextMatch {
+  id        Int       @id @default(1) // fila única
+  matchday  Int?
+  date      DateTime?
+  time      String?
+  opponent  String?
+  place     String?
+  isHome    Boolean   @default(true)
+  updatedAt DateTime  @updatedAt
 }
 
-// ── Registro de entrenamientos (2.3.1) ────────────────────────────
-model TrainingRecord {
-  id                String           @id @default(cuid())
-  date              DateTime
-  createdAt         DateTime         @default(now())
-  plannedTrainingId String?          @unique // entrenamiento de la planificación (2.3 / 6)
-  plannedTraining   PlannedTraining? @relation(fields: [plannedTrainingId], references: [id], onDelete: SetNull)
-  players           TrainingPlayer[]
-  fines             Fine[]
+// ── Clasificación oficial (5.2), editable por el entrenador ───────
+model OfficialStanding {
+  id            String   @id @default(cuid())
+  teamName      String
+  played        Int      @default(0)
+  won           Int      @default(0)
+  drawn         Int      @default(0)
+  lost          Int      @default(0)
+  goalsFor      Int      @default(0)
+  goalsAgainst  Int      @default(0)
+  points        Int      @default(0)
+  createdAt     DateTime @default(now())
 }
 
-model TrainingPlayer {
-  id            String         @id @default(cuid())
-  trainingId    String
-  playerId      String
-  attended      Boolean        @default(true) // ¿Ha asistido?
-  justified     Boolean? // Si no asiste: ¿justificada?
-  absenceReason String? // Motivo de la ausencia
-  grade         Float? // Nota individual (1-10, decimales)
-  observations  String? // Observaciones individuales
-  training      TrainingRecord @relation(fields: [trainingId], references: [id], onDelete: Cascade)
-  player        Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([trainingId, playerId])
-}
-
-// ── Registro de partidos (2.3.2) ──────────────────────────────────
-model MatchRecord {
-  id                  String         @id @default(cuid())
-  date                DateTime
-  opponent            String // Rival
-  formation           String? // Formación utilizada
-  teamGoals           Int            @default(0) // Resultado (goles del equipo)
-  opponentGoals       Int            @default(0) // Resultado (goles del rival)
-  globalGrade         Float? // Nota global del equipo
-  generalObservations String? // Observaciones generales
-  createdAt           DateTime       @default(now())
-  players             MatchPlayer[]
-  goals               MatchGoal[]
-  substitutions       Substitution[]
-  cards               MatchCard[]
-  fines               Fine[]
-}
-
-model MatchPlayer {
-  id           String      @id @default(cuid())
-  matchId      String
-  playerId     String
-  isStarter    Boolean     @default(false) // Once titular
-  position     String? // Posición en la que ha jugado
-  grade        Float? // Nota individual del partido
-  observations String? // Observaciones individuales
-  match        MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player       Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([matchId, playerId])
-}
-
-model MatchGoal {
-  id       String      @id @default(cuid())
-  matchId  String
-  playerId String // Jugador que marca
-  minute   Int? // Minuto del gol
-  match    MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-}
-
-model Substitution {
-  id          String      @id @default(cuid())
-  matchId     String
-  playerOutId String
-  playerInId  String
-  minute      Int?
-  match       MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  playerOut   Player      @relation("SubOut", fields: [playerOutId], references: [id], onDelete: Cascade)
-  playerIn    Player      @relation("SubIn", fields: [playerInId], references: [id], onDelete: Cascade)
-}
-
-model MatchCard {
-  id       String      @id @default(cuid())
-  matchId  String
-  playerId String
-  type     CardType // Amarilla / Roja
-  match    MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-}
-
-// ── Multas (2.3.1 / 2.3.2) ────────────────────────────────────────
-model Fine {
-  id         String          @id @default(cuid())
-  amount     Float // Cantidad a pagar
-  reason     String // Motivo de la multa
-  trainingId String?
-  matchId    String?
-  createdAt  DateTime        @default(now())
-  training   TrainingRecord? @relation(fields: [trainingId], references: [id], onDelete: Cascade)
-  match      MatchRecord?    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  players    Player[]        @relation("FinePlayers") // uno o varios jugadores
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  PLANIFICACIÓN SEMANAL (nuevo)
-// ════════════════════════════════════════════════════════════════════
-
-// Planificación de una semana (1). Una por semana.
+// ── Planificación semanal (8) ─────────────────────────────────────
 model WeeklyPlan {
-  id        String            @id @default(cuid())
-  weekStart DateTime          @unique // lunes de la semana planificada
-  fileData  Bytes? // archivo subido (3)
-  fileName  String?
-  fileMime  String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  trainings PlannedTraining[]
-  match     MatchPlan? // ficha del partido (4)
+  id        String     @id @default(cuid())
+  weekStart DateTime   @unique
+  published Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  activities Activity[]
 }
 
-// Entrenamiento planificado dentro de la semana (2)
-model PlannedTraining {
-  id         String          @id @default(cuid())
+// Actividad de la semana: entrenamiento o partido (8.2 / 8.3)
+model Activity {
+  id         String       @id @default(cuid())
   planId     String
-  dayOfWeek  Int // 1=Lunes … 7=Domingo
-  time       String // "HH:MM"
-  orderIndex Int             @default(0)
-  createdAt  DateTime        @default(now())
-  plan       WeeklyPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
-  exercises  Exercise[]
-  record     TrainingRecord? // registro asociado (6)
+  type       ActivityType
+  date       DateTime // fecha completa
+  startTime  String // hora de inicio "HH:MM"
+  endTime    String? // hora de finalización (opcional)
+  place      String? // campo o lugar
+  // Solo partido:
+  opponent   String?
+  matchday   Int?
+  callTime   String? // hora de convocatoria
+  kitLocal   Boolean? // equipación: true=Local, false=Visitante
+  // Documento del entrenamiento (8.4.1):
+  fileData   Bytes?
+  fileName   String?
+  fileMime   String?
+  orderIndex Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  plan          WeeklyPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  exercises     Exercise[]
+  attendance    Attendance[]
+  calledPlayers Player[]        @relation("Callup") // convocatoria (máx. 18)
+  trainingRecord TrainingRecord?
+  matchRecord    MatchRecord?
 }
 
-// Ejercicio de un entrenamiento planificado (2)
+// Ejercicio de un entrenamiento (8.4.2)
 model Exercise {
   id          String           @id @default(cuid())
-  trainingId  String
-  task        String // Tarea
-  description String? // Descripción de la tarea
-  objective   String? // Objetivo de la tarea
-  duration    String? // Duración
+  activityId  String
+  task        String // imprescindible
+  description String?
+  objective   String?
+  duration    String?
   orderIndex  Int              @default(0)
-  training    PlannedTraining  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  activity    Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
   ratings     ExerciseRating[]
 }
 
-// Valoración de un ejercicio por un jugador (8)
+// Valoración de un ejercicio por un jugador (8.8)
 model ExerciseRating {
   id         String   @id @default(cuid())
   exerciseId String
   playerId   String
-  rating     Float // 1..10 con decimales
+  rating     Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
@@ -241,15 +197,129 @@ model ExerciseRating {
   @@unique([exerciseId, playerId])
 }
 
-// Ficha del partido dentro de la planificación (4)
-model MatchPlan {
-  id            String     @id @default(cuid())
-  planId        String     @unique
-  date          DateTime? // Fecha
-  place         String? // Lugar
-  time          String? // Hora
-  callTime      String? // Hora de convocatoria
-  kitLocal      Boolean    @default(true) // Equipación: true = Local, false = Visitante (4.1)
-  plan          WeeklyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  calledPlayers Player[]   @relation("MatchCallup") // Convocatoria, máx. 18 (4.2)
+// Confirmación de asistencia por actividad (8.5).
+// Si no existe fila para un jugador, se considera GOING (verde) por defecto.
+model Attendance {
+  id          String           @id @default(cuid())
+  activityId  String
+  playerId    String
+  status      AttendanceStatus @default(GOING)
+  reason      AbsenceReason?
+  explanation String?
+  updatedAt   DateTime         @updatedAt
+  activity    Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  player      Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, playerId])
+}
+
+// ── Registro posterior de entrenamiento (8.6) ─────────────────────
+model TrainingRecord {
+  id         String           @id @default(cuid())
+  activityId String           @unique
+  date       DateTime
+  createdAt  DateTime         @default(now())
+  activity   Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  players    TrainingPlayer[]
+}
+
+model TrainingPlayer {
+  id            String         @id @default(cuid())
+  recordId      String
+  playerId      String
+  attended      Boolean        @default(true)
+  justified     Boolean?
+  absenceReason String?
+  grade         Float?
+  observations  String?
+  record        TrainingRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  player        Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([recordId, playerId])
+}
+
+// ── Registro posterior de partido (8.7) ───────────────────────────
+model MatchRecord {
+  id                  String         @id @default(cuid())
+  activityId          String         @unique
+  date                DateTime
+  opponent            String?
+  formation           String?
+  teamGoals           Int            @default(0)
+  opponentGoals       Int            @default(0)
+  globalGrade         Float?
+  generalObservations String?
+  createdAt           DateTime       @default(now())
+  activity            Activity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  players             MatchPlayer[]
+  goals               MatchGoal[]
+  substitutions       Substitution[]
+  cards               MatchCard[]
+}
+
+model MatchPlayer {
+  id           String      @id @default(cuid())
+  recordId     String
+  playerId     String
+  isStarter    Boolean     @default(false)
+  position     String?
+  grade        Float?
+  observations String?
+  record       MatchRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  player       Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([recordId, playerId])
+}
+
+model MatchGoal {
+  id       String      @id @default(cuid())
+  recordId String
+  playerId String
+  minute   Int?
+  record   MatchRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+model Substitution {
+  id          String      @id @default(cuid())
+  recordId    String
+  playerOutId String
+  playerInId  String
+  minute      Int?
+  record      MatchRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  playerOut   Player      @relation("SubOut", fields: [playerOutId], references: [id], onDelete: Cascade)
+  playerIn    Player      @relation("SubIn", fields: [playerInId], references: [id], onDelete: Cascade)
+}
+
+model MatchCard {
+  id       String      @id @default(cuid())
+  recordId String
+  playerId String
+  type     CardType
+  record   MatchRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  player   Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+// ── Multas (10). Una multa por jugador; fuente central. ───────────
+model Fine {
+  id        String   @id @default(cuid())
+  playerId  String
+  date      DateTime // fecha de la infracción
+  concept   String // concepto o motivo
+  amount    Float // importe
+  paid      Boolean  @default(false) // estado de pago
+  createdAt DateTime @default(now())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+// ── Propuestas (9) ────────────────────────────────────────────────
+model Proposal {
+  id        String         @id @default(cuid())
+  playerId  String
+  title     String
+  message   String
+  response  String?
+  status    ProposalStatus @default(PENDIENTE)
+  createdAt DateTime       @default(now())
+  player    Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }

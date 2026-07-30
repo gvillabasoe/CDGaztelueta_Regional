@@ -37,7 +37,7 @@ export default function RootLayout({
     <html lang="es" className={`${display.variable} ${body.variable}`}>
       <body>
         {/* Marco tipo móvil, centrado en pantallas grandes */}
-        <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-beige">
+        <div className="mx-auto flex min-h-screen w-full max-w-[760px] flex-col bg-beige">
           {children}
         </div>
       </body>

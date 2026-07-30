@@ -3,14 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
-import type { SaveMatchInput } from "@/lib/types";
+import type { SaveMatchInput, NewFineInput } from "@/lib/types";
 
-async function isCoach() {
+async function coach() {
   const s = await getSession();
-  return Boolean(s && s.role === "COACH");
+  return s && s.role === "COACH" ? s : null;
 }
 
-function childCreates(input: SaveMatchInput) {
+function children(input: SaveMatchInput) {
   return {
     players: {
       create: input.players.map((p) => ({
@@ -40,60 +40,79 @@ function childCreates(input: SaveMatchInput) {
         .filter((c) => c.playerId)
         .map((c) => ({ playerId: c.playerId, type: c.type })),
     },
-    fines: {
-      create: input.fines
-        .filter((f) => f.playerIds.length > 0 && f.amount > 0)
-        .map((f) => ({
-          amount: f.amount,
-          reason: f.reason,
-          players: { connect: f.playerIds.map((id) => ({ id })) },
-        })),
-    },
   };
 }
 
-function scalarData(input: SaveMatchInput) {
+function scalar(input: SaveMatchInput) {
   return {
     date: new Date(input.date),
-    opponent: input.opponent,
-    formation: input.formation || null,
+    opponent: input.opponent?.trim() || null,
+    formation: input.formation?.trim() || null,
     teamGoals: input.teamGoals,
     opponentGoals: input.opponentGoals,
     globalGrade: input.globalGrade,
-    generalObservations: input.generalObservations || null,
+    generalObservations: input.generalObservations?.trim() || null,
   };
 }
 
+async function addFines(newFines: NewFineInput[]) {
+  const rows: {
+    playerId: string;
+    date: Date;
+    concept: string;
+    amount: number;
+  }[] = [];
+  for (const f of newFines) {
+    if (!(f.amount > 0) || f.playerIds.length === 0) continue;
+    const d = f.date ? new Date(f.date) : new Date();
+    const concept = f.concept?.trim() || "Multa";
+    for (const pid of f.playerIds)
+      rows.push({ playerId: pid, date: d, concept, amount: f.amount });
+  }
+  if (rows.length) await prisma.fine.createMany({ data: rows });
+}
+
 export async function saveMatch(input: SaveMatchInput) {
-  if (!(await isCoach()))
-    return { ok: false as const, error: "No autorizado." };
+  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
+  const activity = await prisma.activity.findUnique({
+    where: { id: input.activityId },
+    include: { matchRecord: { select: { id: true } } },
+  });
+  if (!activity || activity.type !== "MATCH")
+    return { ok: false as const, error: "La actividad no es un partido válido." };
+  if (activity.matchRecord)
+    return {
+      ok: false as const,
+      error: "Ese partido ya tiene un registro. Edítalo desde la actividad.",
+    };
 
   await prisma.matchRecord.create({
-    data: { ...scalarData(input), ...childCreates(input) },
+    data: { activityId: input.activityId, ...scalar(input), ...children(input) },
   });
+  await addFines(input.newFines);
 
-  revalidatePath("/coach/home");
-  revalidatePath("/coach/registro");
+  revalidatePath("/planificacion");
+  revalidatePath(`/planificacion/actividad/${input.activityId}`);
+  revalidatePath("/multas");
   return { ok: true as const };
 }
 
-export async function updateMatch(id: string, input: SaveMatchInput) {
-  if (!(await isCoach()))
-    return { ok: false as const, error: "No autorizado." };
-
+export async function updateMatch(recordId: string, input: SaveMatchInput) {
+  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
   await prisma.$transaction([
-    prisma.matchGoal.deleteMany({ where: { matchId: id } }),
-    prisma.substitution.deleteMany({ where: { matchId: id } }),
-    prisma.matchCard.deleteMany({ where: { matchId: id } }),
-    prisma.matchPlayer.deleteMany({ where: { matchId: id } }),
-    prisma.fine.deleteMany({ where: { matchId: id } }),
+    prisma.matchGoal.deleteMany({ where: { recordId } }),
+    prisma.substitution.deleteMany({ where: { recordId } }),
+    prisma.matchCard.deleteMany({ where: { recordId } }),
+    prisma.matchPlayer.deleteMany({ where: { recordId } }),
     prisma.matchRecord.update({
-      where: { id },
-      data: { ...scalarData(input), ...childCreates(input) },
+      where: { id: recordId },
+      data: { ...scalar(input), ...children(input) },
     }),
   ]);
+  await addFines(input.newFines);
 
-  revalidatePath("/coach/home");
-  revalidatePath("/coach/registro");
+  revalidatePath("/planificacion");
+  revalidatePath(`/planificacion/actividad/${input.activityId}`);
+  revalidatePath("/multas");
   return { ok: true as const };
 }

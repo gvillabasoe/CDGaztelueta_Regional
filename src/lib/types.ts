@@ -1,4 +1,4 @@
-// Tipos compartidos entre formularios (cliente) y acciones (servidor).
+// Tipos compartidos entre componentes cliente y Server Actions.
 
 export type PlayerLite = {
   id: string;
@@ -9,10 +9,72 @@ export type PlayerLite = {
   positions: string[];
 };
 
-export type FineInput = {
+// ── Fichas de jugador (7) ─────────────────────────────────────────
+export type PlayerFichaInput = {
+  firstName: string;
+  lastName: string;
+  nickname: string | null;
+  number: number | null;
+  age: number | null;
+  isCaptain: boolean;
+  positions: string[];
+  photo: string | null; // data URL o null
+  username: string; // usado solo al crear
+  password: string; // usado solo al crear
+};
+
+export type PlayerEditInput = {
+  firstName: string;
+  lastName: string;
+  nickname: string | null;
+  number: number | null;
+  age: number | null;
+  isCaptain: boolean;
+  positions: string[];
+  photo: string | null;
+  // Estadísticas (manuales, 7.2)
+  callups: number;
+  minutes: number;
+  starts: number;
+  benchCount: number;
+  goalsCount: number;
+};
+
+// ── Planificación (8) ─────────────────────────────────────────────
+export type PlanActivityInput = {
+  id?: string;
+  type: "TRAINING" | "MATCH";
+  date: string; // yyyy-mm-dd
+  startTime: string; // HH:MM
+  endTime: string | null;
+  place: string | null;
+  opponent: string | null;
+  matchday: number | null;
+  callTime: string | null;
+  kitLocal: boolean | null;
+  calledPlayerIds: string[]; // convocatoria (máx. 18)
+};
+
+export type PlanInput = {
+  week: string; // YYYY-Www
+  published: boolean;
+  activities: PlanActivityInput[];
+};
+
+export type ExerciseInput = {
+  id?: string;
+  task: string;
+  description: string | null;
+  objective: string | null;
+  duration: string | null;
+};
+
+// ── Registros posteriores (8.6 / 8.7) ─────────────────────────────
+export type NewFineInput = {
   playerIds: string[];
+  date: string; // yyyy-mm-dd
+  concept: string;
   amount: number;
-  reason: string;
 };
 
 export type TrainingPlayerInput = {
@@ -25,10 +87,10 @@ export type TrainingPlayerInput = {
 };
 
 export type SaveTrainingInput = {
+  activityId: string;
   date: string;
-  plannedTrainingId?: string | null;
   players: TrainingPlayerInput[];
-  fines: FineInput[];
+  newFines: NewFineInput[];
 };
 
 export type MatchPlayerInput = {
@@ -48,6 +110,7 @@ export type SubInput = {
 export type CardInput = { playerId: string; type: "YELLOW" | "RED" };
 
 export type SaveMatchInput = {
+  activityId: string;
   date: string;
   opponent: string;
   formation: string | null;
@@ -59,64 +122,45 @@ export type SaveMatchInput = {
   goals: GoalInput[];
   substitutions: SubInput[];
   cards: CardInput[];
-  fines: FineInput[];
+  newFines: NewFineInput[];
 };
 
-export type CreatePlayerInput = {
-  firstName: string;
-  lastName: string;
-  nickname: string | null;
-  number: number | null;
-  age: number | null;
-  isCaptain: boolean;
-  positions: string[];
-  photo: string | null;
-  username: string;
-  password: string;
+// ── Valoración de ejercicios (8.8) ────────────────────────────────
+export type ExerciseRatingInput = { exerciseId: string; rating: number };
+
+// ── Multas (10) ───────────────────────────────────────────────────
+export type FineInput = {
+  playerIds: string[];
+  date: string;
+  concept: string;
+  amount: number;
 };
 
-// ── Planificación semanal ─────────────────────────────────────────
-
-export type PlanExerciseInput = {
-  id?: string; // presente al editar
-  task: string;
-  description: string | null;
-  objective: string | null;
-  duration: string | null;
-};
-
-export type PlanTrainingInput = {
-  id?: string; // presente al editar
-  dayOfWeek: number; // 1..7
-  time: string; // "HH:MM"
-  exercises: PlanExerciseInput[];
-};
-
-export type PlanMatchInput = {
-  date: string | null; // "yyyy-mm-dd"
+// ── Próximo partido (5.1) ─────────────────────────────────────────
+export type NextMatchInput = {
+  matchday: number | null;
+  date: string | null; // yyyy-mm-dd
+  time: string | null;
+  opponent: string | null;
   place: string | null;
-  time: string | null; // "HH:MM"
-  callTime: string | null; // "HH:MM"
-  kitLocal: boolean; // true = Local, false = Visitante
-  calledPlayerIds: string[]; // máx. 18
+  isHome: boolean;
 };
 
-export type PlanFileInput = {
-  name: string;
-  mime: string;
-  dataBase64: string; // base64 sin el prefijo "data:...;base64,"
+// ── Clasificación oficial (5.2) ───────────────────────────────────
+export type StandingInput = {
+  teamName: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
 };
 
-export type PlanInput = {
-  week: string; // "YYYY-Www"
-  trainings: PlanTrainingInput[];
-  match: PlanMatchInput;
-  file: PlanFileInput | null; // null = no cambiar / no adjuntar
-};
-
-// ── Valoración de ejercicios por el jugador ───────────────────────
-
-export type ExerciseRatingInput = {
-  exerciseId: string;
-  rating: number; // 1..10
-};
+// ── Propuestas (9) ────────────────────────────────────────────────
+export type ProposalStatus =
+  | "PENDIENTE"
+  | "EN_REVISION"
+  | "ACEPTADA"
+  | "RECHAZADA";

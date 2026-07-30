@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Crest } from "@/components/Crest";
 
-export function AppHeader({ subtitle }: { subtitle: string }) {
+export function AppHeader({ roleLabel }: { roleLabel: string }) {
   const router = useRouter();
 
   async function logout() {
@@ -16,13 +16,13 @@ export function AppHeader({ subtitle }: { subtitle: string }) {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between bg-marino px-4 py-3 text-beige">
       <div className="flex items-center gap-3">
-        <Crest size={34} />
+        <Crest size={36} />
         <div className="leading-tight">
           <p className="font-display text-lg font-semibold tracking-wide">
             CD Gaztelueta
           </p>
           <p className="text-[11px] uppercase tracking-[0.18em] text-dorado">
-            {subtitle}
+            {roleLabel}
           </p>
         </div>
       </div>

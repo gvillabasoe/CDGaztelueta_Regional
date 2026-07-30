@@ -28,7 +28,7 @@ export function LoginForm() {
         setLoading(false);
         return;
       }
-      router.replace(data.role === "COACH" ? "/coach/home" : "/player/home");
+      router.replace("/home");
       router.refresh();
     } catch {
       setError("Error de conexión. Inténtalo de nuevo.");
