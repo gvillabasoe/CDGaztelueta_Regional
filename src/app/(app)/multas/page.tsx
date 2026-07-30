@@ -25,6 +25,10 @@ export default async function MultasPage({
   const grandTotal = await finesGrandTotal();
   const players = isCoach ? await playersLite() : [];
 
+  // Cantidad efectivamente pagada (migra multas antiguas marcadas "paid" sin importe).
+  const paidOf = (f: { amountPaid: number; paid: boolean; amount: number }) =>
+    Math.min(f.amountPaid > 0 ? f.amountPaid : f.paid ? f.amount : 0, f.amount);
+
   const map = new Map<
     string,
     {
@@ -40,31 +44,43 @@ export default async function MultasPage({
 
   const groups = Array.from(map.values())
     .map(({ player, fines }) => {
-      const items = fines.map((f) => ({
-        id: f.id,
-        dateShort: formatDateShort(f.date),
-        dateInput: toDateInputValue(f.date),
-        concept: f.concept,
-        amount: f.amount,
-        paid: f.paid,
-      }));
+      const items = fines.map((f) => {
+        const paid = paidOf(f);
+        const pending = Math.max(0, f.amount - paid);
+        const status =
+          pending <= 0 ? "PAGADO" : paid > 0 ? "PARCIAL" : "PENDIENTE";
+        return {
+          id: f.id,
+          dateShort: formatDateShort(f.date),
+          dateInput: toDateInputValue(f.date),
+          concept: f.concept,
+          amount: f.amount,
+          amountPaid: paid,
+          pending,
+          status,
+        };
+      });
       const total = items.reduce((s, f) => s + f.amount, 0);
-      const pending = items
-        .filter((f) => !f.paid)
-        .reduce((s, f) => s + f.amount, 0);
+      const paid = items.reduce((s, f) => s + f.amountPaid, 0);
+      const pending = items.reduce((s, f) => s + f.pending, 0);
+      const status =
+        pending <= 0 ? "PAGADO" : paid > 0 ? "PARCIAL" : "PENDIENTE";
       return {
         playerId: player.id,
         name: `${player.firstName} ${player.lastName}`,
         fines: items,
         total,
+        paid,
         pending,
-        paid: total - pending,
+        status,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
   const monthTotal = groups.reduce((s, g) => s + g.total, 0);
+  const monthPaid = groups.reduce((s, g) => s + g.paid, 0);
   const monthPending = groups.reduce((s, g) => s + g.pending, 0);
+  const playersWithDebt = groups.filter((g) => g.pending > 0).length;
 
   return (
     <MultasView
@@ -73,8 +89,9 @@ export default async function MultasPage({
       month0={month0}
       groups={groups}
       monthTotal={monthTotal}
+      monthPaid={monthPaid}
       monthPending={monthPending}
-      monthPaid={monthTotal - monthPending}
+      playersWithDebt={playersWithDebt}
       grandTotal={grandTotal}
       players={players}
     />

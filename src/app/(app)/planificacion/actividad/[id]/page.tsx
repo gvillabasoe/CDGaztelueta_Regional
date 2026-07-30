@@ -15,6 +15,7 @@ import {
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getActivity, currentPlayer } from "@/lib/queries";
+import { isTrainingAttendanceClosed } from "@/lib/deadlines";
 import { formatDateLong } from "@/lib/format";
 import { AttendancePanel } from "./AttendancePanel";
 import { ExercisesEditor } from "./ExercisesEditor";
@@ -54,10 +55,13 @@ export default async function ActivityPage({
       status: (r?.status ?? "GOING") as "GOING" | "NOT_GOING",
       reason: (r?.reason ?? null) as string | null,
       explanation: r?.explanation ?? null,
+      outOfTime: r?.outOfTime ?? false,
     };
   });
 
   const isMatch = activity.type === "MATCH";
+  const attendanceClosed =
+    activity.type === "TRAINING" && isTrainingAttendanceClosed(activity.date);
   const calledIds = new Set(activity.calledPlayers.map((p) => p.id));
   const called = roster.filter((p) => calledIds.has(p.id));
   const hasRecord = isMatch ? !!activity.matchRecord : !!activity.trainingRecord;
@@ -229,6 +233,8 @@ export default async function ActivityPage({
           isCoach={isCoach}
           myPlayerId={myPlayerId}
           players={attendancePlayers}
+          isTraining={!isMatch}
+          closed={attendanceClosed}
         />
       </section>
 

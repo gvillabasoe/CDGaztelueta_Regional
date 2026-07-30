@@ -52,9 +52,10 @@ model User {
   id        String   @id @default(cuid())
   username  String   @unique
   password  String // hash bcrypt
-  role      Role
-  player    Player?
-  createdAt DateTime @default(now())
+  role          Role
+  player        Player?
+  createdAt     DateTime @default(now())
+  hideStandings Boolean  @default(false) // preferencia personal: ocultar clasificación oficial en HOME
 }
 
 // ── Ficha del jugador (7) ─────────────────────────────────────────
@@ -205,8 +206,12 @@ model Attendance {
   playerId    String
   status      AttendanceStatus @default(GOING)
   reason      AbsenceReason?
-  explanation String?
-  updatedAt   DateTime         @updatedAt
+  explanation   String?
+  updatedAt     DateTime         @updatedAt
+  modifiedById  String? // usuario que hizo el último cambio (auditoría)
+  modifiedByName String?
+  modifiedAt    DateTime?
+  outOfTime     Boolean          @default(false) // cambio realizado fuera de plazo (solo entrenador)
   activity    Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
   player      Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
@@ -306,8 +311,9 @@ model Fine {
   playerId  String
   date      DateTime // fecha de la infracción
   concept   String // concepto o motivo
-  amount    Float // importe
-  paid      Boolean  @default(false) // estado de pago
+  amount     Float // importe
+  paid       Boolean  @default(false) // pagado por completo (derivado de amountPaid)
+  amountPaid Float    @default(0) // cantidad abonada (permite pagos parciales)
   createdAt DateTime @default(now())
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }

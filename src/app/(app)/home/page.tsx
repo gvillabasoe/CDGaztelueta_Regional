@@ -2,7 +2,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatDateLong, toDateInputValue } from "@/lib/format";
 import { NextMatchCard } from "./NextMatchCard";
-import { StandingsTable } from "./StandingsTable";
+import { StandingsSection } from "./StandingsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,16 @@ export default async function HomePage() {
 
   const nm = await prisma.nextMatch.findUnique({ where: { id: 1 } });
   const standings = await prisma.officialStanding.findMany();
+
+  // Preferencia personal de ocultar la clasificación.
+  let hideStandings = false;
+  if (session) {
+    const u = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { hideStandings: true },
+    });
+    hideStandings = u?.hideStandings ?? false;
+  }
 
   const nmData = {
     matchday: nm?.matchday ?? null,
@@ -27,23 +37,21 @@ export default async function HomePage() {
     <div className="space-y-5">
       <NextMatchCard isCoach={isCoach} data={nmData} dateLong={dateLong} />
 
-      <section>
-        <h2 className="eyebrow mb-2 px-1">Clasificación oficial</h2>
-        <StandingsTable
-          isCoach={isCoach}
-          rows={standings.map((s) => ({
-            id: s.id,
-            teamName: s.teamName,
-            played: s.played,
-            won: s.won,
-            drawn: s.drawn,
-            lost: s.lost,
-            goalsFor: s.goalsFor,
-            goalsAgainst: s.goalsAgainst,
-            points: s.points,
-          }))}
-        />
-      </section>
+      <StandingsSection
+        isCoach={isCoach}
+        initialHidden={hideStandings}
+        rows={standings.map((s) => ({
+          id: s.id,
+          teamName: s.teamName,
+          played: s.played,
+          won: s.won,
+          drawn: s.drawn,
+          lost: s.lost,
+          goalsFor: s.goalsFor,
+          goalsAgainst: s.goalsAgainst,
+          points: s.points,
+        }))}
+      />
     </div>
   );
 }

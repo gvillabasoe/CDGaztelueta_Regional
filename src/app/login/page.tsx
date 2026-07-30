@@ -15,6 +15,9 @@ export default function LoginPage() {
           <h1 className="mt-4 font-display text-3xl font-semibold tracking-wide">
             CD Gaztelueta
           </h1>
+          <p className="mt-1 font-display text-base italic text-beige/90">
+            Como en casa, en ningún lado
+          </p>
           <p className="mt-1 text-xs uppercase tracking-[0.22em] text-dorado">
             Área privada del equipo
           </p>
