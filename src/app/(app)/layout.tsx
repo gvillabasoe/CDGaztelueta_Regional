@@ -1,7 +1,9 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
+import { AccountNotice } from "./AccountNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,20 @@ export default async function AppLayout({
 }) {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  // Un jugador solo accede como activo si su ficha está ACTIVE (§7.2).
+  if (session.role === "PLAYER") {
+    const player = await prisma.player.findFirst({
+      where: { userId: session.userId },
+      select: { status: true },
+    });
+    if (!player || player.status !== "ACTIVE") {
+      return (
+        <AccountNotice status={player?.status === "INACTIVE" ? "INACTIVE" : "PENDING"} />
+      );
+    }
+  }
+
   const roleLabel = session.role === "COACH" ? "Entrenador" : "Jugador";
   return <AppShell roleLabel={roleLabel}>{children}</AppShell>;
 }

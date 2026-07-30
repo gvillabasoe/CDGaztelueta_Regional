@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search, UserPlus, Star, ChevronRight } from "lucide-react";
+import { Search, UserPlus, Star, ChevronRight, Users } from "lucide-react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 type P = {
@@ -21,9 +21,11 @@ type Sort = "name" | "number" | "position";
 export function RosterView({
   isCoach,
   players,
+  pendingCount = 0,
 }: {
   isCoach: boolean;
   players: P[];
+  pendingCount?: number;
 }) {
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState<Sort>("name");
@@ -58,14 +60,33 @@ export function RosterView({
           <h1 className="font-display text-2xl font-semibold text-negro">
             Mi Equipo
           </h1>
-          <p className="text-sm text-gris">{players.length} jugadores</p>
+          <p className="text-sm text-gris">{players.length} jugadores activos</p>
         </div>
         {isCoach && (
-          <Link href="/equipo/nueva" className="btn-gold">
+          <Link href="/equipo/nueva" className="btn-gold shrink-0">
             <UserPlus size={16} /> Crear ficha
           </Link>
         )}
       </div>
+
+      {isCoach && (
+        <Link
+          href="/equipo/gestionar"
+          className="card flex items-center justify-between p-3 transition hover:bg-beige/60"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-negro">
+            <Users size={18} className="text-marino" />
+            Gestionar plantilla
+          </span>
+          {pendingCount > 0 ? (
+            <span className="rounded-full bg-amarillo/40 px-2 py-0.5 text-xs font-semibold text-negro">
+              {pendingCount} pendiente{pendingCount === 1 ? "" : "s"}
+            </span>
+          ) : (
+            <ChevronRight size={18} className="text-gris" />
+          )}
+        </Link>
+      )}
 
       <div className="flex gap-2">
         <div className="relative flex-1">

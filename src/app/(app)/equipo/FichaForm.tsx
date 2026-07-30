@@ -7,7 +7,11 @@ import { Switch } from "@/components/Switch";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { POSITIONS } from "./positions";
 import { createPlayer, updatePlayer } from "@/actions/player";
-import type { PlayerFichaInput, PlayerEditInput } from "@/lib/types";
+import type {
+  PlayerFichaInput,
+  PlayerEditInput,
+  PlayerStatus,
+} from "@/lib/types";
 
 export type FichaData = {
   firstName: string;
@@ -18,6 +22,9 @@ export type FichaData = {
   isCaptain: boolean;
   positions: string[];
   photo: string | null;
+  email: string | null;
+  phone: string | null;
+  status: PlayerStatus;
   callups: number;
   minutes: number;
   starts: number;
@@ -34,6 +41,9 @@ const empty: FichaData = {
   isCaptain: false,
   positions: [],
   photo: null,
+  email: "",
+  phone: "",
+  status: "ACTIVE",
   callups: 0,
   minutes: 0,
   starts: 0,
@@ -73,6 +83,9 @@ export function FichaForm({
   const [multi, setMulti] = React.useState(start.positions.length > 1);
   const [positions, setPositions] = React.useState<string[]>(start.positions);
   const [photo, setPhoto] = React.useState<string | null>(start.photo);
+  const [email, setEmail] = React.useState(start.email ?? "");
+  const [phone, setPhone] = React.useState(start.phone ?? "");
+  const [status, setStatus] = React.useState<PlayerStatus>(start.status);
 
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -115,6 +128,8 @@ export function FichaForm({
         isCaptain,
         positions,
         photo,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
         username,
         password,
       };
@@ -136,6 +151,9 @@ export function FichaForm({
         isCaptain,
         positions,
         photo,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        status,
         callups: int0(callups),
         minutes: int0(minutes),
         starts: int0(starts),
@@ -211,6 +229,26 @@ export function FichaForm({
               onChange={(e) => setAge(e.target.value)}
             />
           </div>
+          <div className="col-span-2">
+            <label className="label">Correo electrónico</label>
+            <input
+              className="field"
+              type="email"
+              autoCapitalize="none"
+              placeholder="Para vincular su cuenta (opcional)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Teléfono (opcional)</label>
+            <input
+              className="field"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="mt-3 flex items-center justify-between rounded-xl bg-beige px-3 py-2.5">
@@ -271,10 +309,14 @@ export function FichaForm({
 
       {mode === "create" && (
         <div className="card p-5">
-          <p className="eyebrow mb-3">Cuenta del jugador</p>
+          <p className="eyebrow mb-1">Cuenta del jugador (opcional)</p>
+          <p className="mb-3 text-xs text-gris">
+            Puedes guardar la ficha sin cuenta. El jugador podrá registrarse él
+            mismo con su correo, o puedes crearle una cuenta ahora.
+          </p>
           <div className="space-y-3">
             <div>
-              <label className="label">Usuario *</label>
+              <label className="label">Usuario</label>
               <input
                 className="field"
                 autoCapitalize="none"
@@ -283,7 +325,7 @@ export function FichaForm({
               />
             </div>
             <div>
-              <label className="label">Contraseña inicial *</label>
+              <label className="label">Contraseña inicial</label>
               <input
                 className="field"
                 value={password}
@@ -295,6 +337,21 @@ export function FichaForm({
               contraseña no se mostrará después.
             </p>
           </div>
+        </div>
+      )}
+
+      {mode === "edit" && (
+        <div className="card p-5">
+          <label className="label">Estado del jugador</label>
+          <select
+            className="field"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as PlayerStatus)}
+          >
+            <option value="ACTIVE">Activo</option>
+            <option value="INACTIVE">Inactivo (baja)</option>
+            <option value="PENDING">Pendiente de revisión</option>
+          </select>
         </div>
       )}
 

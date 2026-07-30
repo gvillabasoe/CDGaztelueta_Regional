@@ -11,6 +11,7 @@ export async function currentPlayer() {
 // Plantilla completa.
 export async function roster() {
   return prisma.player.findMany({
+    where: { status: "ACTIVE" },
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
   });
 }
@@ -18,6 +19,7 @@ export async function roster() {
 // Jugadores para formularios/convocatorias (forma ligera).
 export async function playersLite() {
   return prisma.player.findMany({
+    where: { status: "ACTIVE" },
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
     select: {
       id: true,
@@ -75,7 +77,32 @@ export async function getActivity(id: string) {
 
 // Total de jugadores (para el resumen de asistencia: GOING = total - NOT_GOING).
 export async function playerCount() {
-  return prisma.player.count();
+  return prisma.player.count({ where: { status: "ACTIVE" } });
+}
+
+// Todos los jugadores (cualquier estado) para "Gestionar plantilla".
+export async function managementPlayers() {
+  return prisma.player.findMany({
+    orderBy: [{ status: "asc" }, { firstName: "asc" }],
+    include: {
+      user: { select: { username: true } },
+      _count: {
+        select: {
+          fines: true,
+          attendance: true,
+          trainingEntries: true,
+          matchEntries: true,
+          exerciseRatings: true,
+          goals: true,
+        },
+      },
+    },
+  });
+}
+
+// Nº de fichas pendientes de revisión (aviso interno al entrenador).
+export async function pendingCount() {
+  return prisma.player.count({ where: { status: "PENDING" } });
 }
 
 // Último entrenamiento (actividad TRAINING publicada más reciente ya pasada;

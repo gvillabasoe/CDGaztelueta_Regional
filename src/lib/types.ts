@@ -10,6 +10,8 @@ export type PlayerLite = {
 };
 
 // ── Fichas de jugador (7) ─────────────────────────────────────────
+export type PlayerStatus = "ACTIVE" | "INACTIVE" | "PENDING";
+
 export type PlayerFichaInput = {
   firstName: string;
   lastName: string;
@@ -19,8 +21,11 @@ export type PlayerFichaInput = {
   isCaptain: boolean;
   positions: string[];
   photo: string | null; // data URL o null
-  username: string; // usado solo al crear
-  password: string; // usado solo al crear
+  email: string | null; // correo (para vincular cuenta)
+  phone: string | null; // teléfono opcional
+  // Cuenta de acceso OPCIONAL al crear la ficha:
+  username: string; // vacío = ficha sin cuenta
+  password: string; // vacío = ficha sin cuenta
 };
 
 export type PlayerEditInput = {
@@ -32,12 +37,22 @@ export type PlayerEditInput = {
   isCaptain: boolean;
   positions: string[];
   photo: string | null;
+  email: string | null;
+  phone: string | null;
+  status: PlayerStatus;
   // Estadísticas (manuales, 7.2)
   callups: number;
   minutes: number;
   starts: number;
   benchCount: number;
   goalsCount: number;
+};
+
+export type RegisterInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
 };
 
 // ── Planificación (8) ─────────────────────────────────────────────

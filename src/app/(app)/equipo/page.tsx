@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { pendingCount } from "@/lib/queries";
 import { RosterView } from "./RosterView";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export default async function EquipoPage() {
   const isCoach = session?.role === "COACH";
 
   const players = await prisma.player.findMany({
+    where: { status: "ACTIVE" },
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
     select: {
       id: true,
@@ -22,5 +24,9 @@ export default async function EquipoPage() {
     },
   });
 
-  return <RosterView isCoach={isCoach} players={players} />;
+  const pending = isCoach ? await pendingCount() : 0;
+
+  return (
+    <RosterView isCoach={isCoach} players={players} pendingCount={pending} />
+  );
 }

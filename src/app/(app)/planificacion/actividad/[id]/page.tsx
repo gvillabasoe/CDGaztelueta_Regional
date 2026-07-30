@@ -40,6 +40,7 @@ export default async function ActivityPage({
   const myPlayerId = me?.id ?? null;
 
   const roster = await prisma.player.findMany({
+    where: { status: "ACTIVE" },
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
     select: { id: true, firstName: true, lastName: true, photo: true },
   });

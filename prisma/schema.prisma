@@ -15,6 +15,12 @@ enum Role {
   PLAYER
 }
 
+enum PlayerStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
 enum CardType {
   YELLOW
   RED
@@ -69,6 +75,9 @@ model Player {
   isCaptain Boolean  @default(false)
   positions String[]
   photo     String? // data URL
+  email     String? // correo normalizado (vinculación cuenta<->ficha)
+  phone     String? // teléfono (opcional)
+  status    PlayerStatus @default(ACTIVE) // activo / inactivo / pendiente de revisión
   userId    String?  @unique
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())

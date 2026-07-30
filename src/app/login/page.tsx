@@ -1,5 +1,6 @@
 import { Crest } from "@/components/Crest";
 import { TeamPhoto } from "@/components/TeamPhoto";
+import Link from "next/link";
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,13 @@ export default function LoginPage() {
           <p className="eyebrow mb-3">Iniciar sesión</p>
           <LoginForm />
         </div>
+
+        <p className="mt-4 text-center text-sm text-beige/80">
+          ¿Eres jugador y aún no tienes cuenta?{" "}
+          <Link href="/registro" className="font-semibold text-dorado underline">
+            Crear cuenta
+          </Link>
+        </p>
       </div>
     </div>
   );

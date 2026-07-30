@@ -9,6 +9,7 @@ export default async function LigaPage() {
   const isCoach = session?.role === "COACH";
 
   const players = await prisma.player.findMany({
+    where: { status: "ACTIVE" },
     select: {
       id: true,
       firstName: true,
