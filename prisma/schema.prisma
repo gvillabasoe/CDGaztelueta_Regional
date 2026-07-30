@@ -46,6 +46,12 @@ enum AbsenceReason {
   OTRO
 }
 
+enum PollStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
 enum ProposalStatus {
   PENDIENTE
   EN_REVISION
@@ -101,6 +107,7 @@ model Player {
   cards           MatchCard[]
   subsIn          Substitution[]   @relation("SubIn")
   subsOut         Substitution[]   @relation("SubOut")
+  pollCandidacies Poll[]           @relation("PollCandidates")
 }
 
 // ── Datos generales del club (1) ──────────────────────────────────
@@ -178,6 +185,7 @@ model Activity {
   calledPlayers Player[]        @relation("Callup") // convocatoria (máx. 18)
   trainingRecord TrainingRecord?
   matchRecord    MatchRecord?
+  poll           Poll?
 }
 
 // Ejercicio de un entrenamiento (8.4.2)
@@ -337,4 +345,35 @@ model Proposal {
   status    ProposalStatus @default(PENDIENTE)
   createdAt DateTime       @default(now())
   player    Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+// Votación de "Jugador del Mes" (13-20). Vinculada a un partido (Activity MATCH).
+model Poll {
+  id           String     @id @default(cuid())
+  activityId   String     @unique
+  activity     Activity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  monthKey     String // "YYYY-MM": mes al que se asignan los puntos (fecha del partido)
+  closesAt     DateTime // cierre (por defecto martes 23:59 Europe/Madrid)
+  status       PollStatus @default(OPEN)
+  allowSelfVote Boolean   @default(false)
+  createdAt    DateTime   @default(now())
+
+  candidates Player[]  @relation("PollCandidates")
+  ballots    Ballot[]
+}
+
+// Papeleta 3-2-1 (16-17). Anónima frente a los jugadores.
+// voterId = id del User que vota. first/second/third = ids de Player (3/2/1 puntos).
+model Ballot {
+  id        String   @id @default(cuid())
+  pollId    String
+  voterId   String
+  firstId   String // 3 puntos
+  secondId  String // 2 puntos
+  thirdId   String // 1 punto
+  excluded  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, voterId])
 }

@@ -69,6 +69,17 @@ export function RosterView({
         )}
       </div>
 
+      <Link
+        href="/equipo/jugador-del-mes"
+        className="card flex items-center justify-between p-3 transition hover:bg-beige/60"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium text-negro">
+          <Star size={18} className="text-dorado" />
+          Jugador del Mes
+        </span>
+        <ChevronRight size={18} className="text-gris" />
+      </Link>
+
       {isCoach && (
         <Link
           href="/equipo/gestionar"

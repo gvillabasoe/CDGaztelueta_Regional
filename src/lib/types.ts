@@ -179,3 +179,20 @@ export type ProposalStatus =
   | "EN_REVISION"
   | "ACEPTADA"
   | "RECHAZADA";
+
+// ── Jugador del Mes ──
+export type PollStatus = "OPEN" | "CLOSED" | "CANCELLED";
+
+export type CreatePollInput = {
+  activityId: string;
+  allowSelfVote: boolean;
+  candidateIds: string[];
+  closesAt: string | null; // datetime-local (opcional; si no, martes 23:59)
+};
+
+export type BallotInput = {
+  pollId: string;
+  firstId: string; // 3 puntos
+  secondId: string; // 2 puntos
+  thirdId: string; // 1 punto
+};

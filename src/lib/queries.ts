@@ -153,3 +153,189 @@ export async function finesGrandTotal() {
   const agg = await prisma.fine.aggregate({ _sum: { amount: true } });
   return agg._sum.amount ?? 0;
 }
+
+// ─────────────────────────── Jugador del Mes ───────────────────────────
+
+// ¿Cuenta esta votación para la clasificación? (cerrada o pasada su fecha, y no anulada)
+function pollCounts(
+  p: { status: string; closesAt: Date },
+  now: Date,
+): boolean {
+  if (p.status === "CANCELLED") return false;
+  return p.status === "CLOSED" || now >= p.closesAt;
+}
+
+// Votación del partido (o null).
+export async function pollForActivity(activityId: string) {
+  return prisma.poll.findUnique({
+    where: { activityId },
+    include: {
+      candidates: { select: { id: true } },
+      _count: { select: { ballots: true } },
+    },
+  });
+}
+
+export async function pollById(id: string) {
+  return prisma.poll.findUnique({
+    where: { id },
+    include: {
+      activity: true,
+      candidates: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          photo: true,
+          number: true,
+        },
+      },
+    },
+  });
+}
+
+// Votación más reciente (por fecha del partido).
+export async function latestPoll() {
+  const poll = await prisma.poll.findFirst({
+    orderBy: { activity: { date: "desc" } },
+    include: {
+      activity: true,
+      candidates: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          photo: true,
+          number: true,
+        },
+      },
+    },
+  });
+  return poll;
+}
+
+// Partidos (MATCH) que aún no tienen votación (para crearla).
+export async function matchesWithoutPoll() {
+  const acts = await prisma.activity.findMany({
+    where: { type: "MATCH", poll: null },
+    orderBy: { date: "desc" },
+    include: { calledPlayers: { select: { id: true } } },
+    take: 30,
+  });
+  return acts;
+}
+
+// Clasificación mensual (idempotente: se agrega en vivo desde las papeletas).
+export async function monthlyClassification(monthKey: string) {
+  const now = new Date();
+  const polls = await prisma.poll.findMany({
+    where: { monthKey, status: { not: "CANCELLED" } },
+    include: { ballots: { where: { excluded: false } } },
+  });
+  const counted = polls.filter((p) => pollCounts(p, now));
+
+  const pts = new Map<string, number>();
+  const add = (id: string, n: number) => pts.set(id, (pts.get(id) ?? 0) + n);
+  for (const p of counted)
+    for (const b of p.ballots) {
+      add(b.firstId, 3);
+      add(b.secondId, 2);
+      add(b.thirdId, 1);
+    }
+
+  const scoredIds = [...pts.keys()];
+  const players = await prisma.player.findMany({
+    where: {
+      OR: [
+        { status: "ACTIVE" },
+        ...(scoredIds.length ? [{ id: { in: scoredIds } }] : []),
+      ],
+    },
+    select: { id: true, firstName: true, lastName: true, photo: true },
+  });
+
+  return players
+    .map((pl) => ({
+      id: pl.id,
+      name: `${pl.firstName} ${pl.lastName}`,
+      photo: pl.photo,
+      points: pts.get(pl.id) ?? 0,
+    }))
+    .sort(
+      (a, b) => b.points - a.points || a.name.localeCompare(b.name, "es"),
+    );
+}
+
+// Historial de ganadores (meses con votaciones contabilizadas).
+export async function winnersHistory() {
+  const now = new Date();
+  const polls = await prisma.poll.findMany({
+    where: { status: { not: "CANCELLED" } },
+    select: { monthKey: true, status: true, closesAt: true },
+  });
+  const months = [
+    ...new Set(polls.filter((p) => pollCounts(p, now)).map((p) => p.monthKey)),
+  ]
+    .sort()
+    .reverse();
+
+  const winners: {
+    monthKey: string;
+    id: string;
+    name: string;
+    photo: string | null;
+    points: number;
+  }[] = [];
+  for (const mk of months) {
+    const cls = await monthlyClassification(mk);
+    const top = cls[0];
+    if (top && top.points > 0) winners.push({ monthKey: mk, ...top });
+  }
+  return winners;
+}
+
+// Datos de administración de una votación (SIN exponer el contenido de los votos).
+export async function pollAdminData(pollId: string) {
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    include: {
+      activity: true,
+      ballots: { select: { id: true, voterId: true, excluded: true } },
+      _count: { select: { ballots: true, candidates: true } },
+    },
+  });
+  if (!poll) return null;
+
+  const eligible = await prisma.player.findMany({
+    where: { status: "ACTIVE", userId: { not: null } },
+    select: { id: true, userId: true, firstName: true, lastName: true },
+  });
+
+  const nonExcludedVoterIds = new Set(
+    poll.ballots.filter((b) => !b.excluded).map((b) => b.voterId),
+  );
+  const anyBallotByVoter = new Map(poll.ballots.map((b) => [b.voterId, b]));
+
+  const voted = eligible
+    .filter((p) => p.userId && anyBallotByVoter.has(p.userId))
+    .map((p) => {
+      const b = p.userId ? anyBallotByVoter.get(p.userId) : undefined;
+      return {
+        playerId: p.id,
+        name: `${p.firstName} ${p.lastName}`,
+        ballotId: b?.id ?? null,
+        excluded: b?.excluded ?? false,
+      };
+    });
+  const notVoted = eligible
+    .filter((p) => !p.userId || !anyBallotByVoter.has(p.userId))
+    .map((p) => ({ playerId: p.id, name: `${p.firstName} ${p.lastName}` }));
+
+  return {
+    poll,
+    eligibleCount: eligible.length,
+    votedCount: nonExcludedVoterIds.size,
+    voted,
+    notVoted,
+  };
+}

@@ -169,6 +169,20 @@ export async function mergePlayers(keepId: string, mergeId: string) {
       data: { playerInId: keepId },
     });
 
+    // Votos recibidos en papeletas de "Jugador del Mes".
+    await tx.ballot.updateMany({
+      where: { firstId: mergeId },
+      data: { firstId: keepId },
+    });
+    await tx.ballot.updateMany({
+      where: { secondId: mergeId },
+      data: { secondId: keepId },
+    });
+    await tx.ballot.updateMany({
+      where: { thirdId: mergeId },
+      data: { thirdId: keepId },
+    });
+
     // 3) Relaciones con @@unique(x, playerId): mover si no colisiona; si no, descartar la duplicada.
     const moveUnique = async (
       rows: { id: string; key: string }[],

@@ -44,3 +44,16 @@ export function formatEuro(n: number): string {
     currency: "EUR",
   }).format(n);
 }
+
+// Fecha + hora en Europe/Madrid, p. ej. "martes, 12 de agosto, 23:59".
+export function formatDateTime(d: Date): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Madrid",
+  }).format(d);
+}
