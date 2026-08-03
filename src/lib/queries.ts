@@ -227,16 +227,15 @@ export async function matchesWithoutPoll() {
 
 // Clasificación mensual (idempotente: se agrega en vivo desde las papeletas).
 export async function monthlyClassification(monthKey: string) {
-  const now = new Date();
   const polls = await prisma.poll.findMany({
     where: { monthKey, status: { not: "CANCELLED" } },
     include: { ballots: { where: { excluded: false } } },
   });
-  const counted = polls.filter((p) => pollCounts(p, now));
 
+  // Se cuentan TODAS las votaciones no anuladas (abiertas = provisional, cerradas = definitivo).
   const pts = new Map<string, number>();
   const add = (id: string, n: number) => pts.set(id, (pts.get(id) ?? 0) + n);
-  for (const p of counted)
+  for (const p of polls)
     for (const b of p.ballots) {
       add(b.firstId, 3);
       add(b.secondId, 2);
@@ -294,48 +293,89 @@ export async function winnersHistory() {
   return winners;
 }
 
+// Votantes elegibles: jugadores activos con cuenta + cuerpo técnico con permiso de voto.
+export async function eligibleVoters() {
+  const players = await prisma.player.findMany({
+    where: { status: "ACTIVE", userId: { not: null } },
+    select: { id: true, userId: true, firstName: true, lastName: true },
+  });
+  const staff = await prisma.user.findMany({
+    where: { role: "COACH", canVote: true },
+    select: { id: true, username: true },
+  });
+  return [
+    ...players.map((p) => ({
+      voterId: p.userId as string,
+      name: `${p.firstName} ${p.lastName}`,
+      kind: "player" as const,
+    })),
+    ...staff.map((u) => ({
+      voterId: u.id,
+      name: `Entrenador (${u.username})`,
+      kind: "coach" as const,
+    })),
+  ];
+}
+
 // Datos de administración de una votación (SIN exponer el contenido de los votos).
 export async function pollAdminData(pollId: string) {
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
     include: {
       activity: true,
-      ballots: { select: { id: true, voterId: true, excluded: true } },
+      ballots: {
+        select: { id: true, voterId: true, excluded: true, onBehalfOfId: true },
+      },
       _count: { select: { ballots: true, candidates: true } },
     },
   });
   if (!poll) return null;
 
-  const eligible = await prisma.player.findMany({
-    where: { status: "ACTIVE", userId: { not: null } },
-    select: { id: true, userId: true, firstName: true, lastName: true },
-  });
-
-  const nonExcludedVoterIds = new Set(
+  const voters = await eligibleVoters();
+  const nonExcluded = new Set(
     poll.ballots.filter((b) => !b.excluded).map((b) => b.voterId),
   );
-  const anyBallotByVoter = new Map(poll.ballots.map((b) => [b.voterId, b]));
+  const byVoter = new Map(poll.ballots.map((b) => [b.voterId, b]));
 
-  const voted = eligible
-    .filter((p) => p.userId && anyBallotByVoter.has(p.userId))
-    .map((p) => {
-      const b = p.userId ? anyBallotByVoter.get(p.userId) : undefined;
+  const voted = voters
+    .filter((v) => byVoter.has(v.voterId))
+    .map((v) => {
+      const b = byVoter.get(v.voterId)!;
       return {
-        playerId: p.id,
-        name: `${p.firstName} ${p.lastName}`,
-        ballotId: b?.id ?? null,
-        excluded: b?.excluded ?? false,
+        voterId: v.voterId,
+        name: v.name,
+        kind: v.kind,
+        ballotId: b.id,
+        excluded: b.excluded,
       };
     });
-  const notVoted = eligible
-    .filter((p) => !p.userId || !anyBallotByVoter.has(p.userId))
-    .map((p) => ({ playerId: p.id, name: `${p.firstName} ${p.lastName}` }));
+  const notVoted = voters
+    .filter((v) => !byVoter.has(v.voterId))
+    .map((v) => ({ voterId: v.voterId, name: v.name, kind: v.kind }));
+
+  // Votos registrados por el entrenador en nombre de jugadores sin cuenta.
+  const obh = poll.ballots.filter((b) => b.onBehalfOfId);
+  const obhPlayers = obh.length
+    ? await prisma.player.findMany({
+        where: { id: { in: obh.map((b) => b.onBehalfOfId as string) } },
+        select: { id: true, firstName: true, lastName: true },
+      })
+    : [];
+  const obhName = new Map(
+    obhPlayers.map((p) => [p.id, `${p.firstName} ${p.lastName}`]),
+  );
+  const onBehalf = obh.map((b) => ({
+    ballotId: b.id,
+    name: obhName.get(b.onBehalfOfId as string) ?? "Jugador",
+    excluded: b.excluded,
+  }));
 
   return {
     poll,
-    eligibleCount: eligible.length,
-    votedCount: nonExcludedVoterIds.size,
+    eligibleCount: voters.length,
+    votedCount: voters.filter((v) => nonExcluded.has(v.voterId)).length,
     voted,
     notVoted,
+    onBehalf,
   };
 }

@@ -19,15 +19,20 @@ export async function GET() {
 
     // Entrenadores: se crean si no existen, o se les fija la contraseña si ya existían.
     const coaches = [
-      { username: "igomeza30", password: "mister" },
-      { username: "diegozumarraga", password: "2mister" },
+      { username: "igomeza30", password: "mister", canVote: true },
+      { username: "diegozumarraga", password: "2mister", canVote: false },
     ];
     for (const c of coaches) {
       const hash = await bcrypt.hash(c.password, 10);
       await prisma.user.upsert({
         where: { username: c.username },
-        update: { password: hash, role: "COACH" },
-        create: { username: c.username, password: hash, role: "COACH" },
+        update: { password: hash, role: "COACH", canVote: c.canVote },
+        create: {
+          username: c.username,
+          password: hash,
+          role: "COACH",
+          canVote: c.canVote,
+        },
       });
     }
 

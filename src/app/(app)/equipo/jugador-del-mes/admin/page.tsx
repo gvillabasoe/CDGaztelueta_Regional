@@ -7,6 +7,7 @@ import { matchesWithoutPoll, pollAdminData } from "@/lib/queries";
 import { formatDateShort, formatDateTime } from "@/lib/format";
 import { CreatePoll } from "./CreatePoll";
 import { PollAdmin, type PollAdminData } from "./PollAdmin";
+import { VotePermissions } from "./VotePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,21 +26,30 @@ export default async function AdminVotacionesPage() {
   const activePlayers = await prisma.player.findMany({
     where: { status: "ACTIVE" },
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true, userId: true },
   });
   const players = activePlayers.map((p) => ({
     id: p.id,
     name: `${p.firstName} ${p.lastName}`,
   }));
+  const noAccountPlayers = activePlayers
+    .filter((p) => !p.userId)
+    .map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}` }));
+
+  const coaches = await prisma.user.findMany({
+    where: { role: "COACH" },
+    orderBy: { username: "asc" },
+    select: { id: true, username: true, canVote: true },
+  });
 
   const polls = await prisma.poll.findMany({
     orderBy: { activity: { date: "desc" } },
-    select: { id: true },
+    select: { id: true, candidates: { select: { id: true, firstName: true, lastName: true } } },
   });
 
   const adminData: PollAdminData[] = [];
-  for (const { id } of polls) {
-    const d = await pollAdminData(id);
+  for (const p of polls) {
+    const d = await pollAdminData(p.id);
     if (!d) continue;
     const effectiveClosed =
       d.poll.status === "CLOSED" || now >= d.poll.closesAt;
@@ -55,6 +65,12 @@ export default async function AdminVotacionesPage() {
       votedCount: d.votedCount,
       voted: d.voted,
       notVoted: d.notVoted,
+      onBehalf: d.onBehalf,
+      candidates: p.candidates.map((c) => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+      })),
+      noAccountPlayers,
     });
   }
 
@@ -71,6 +87,8 @@ export default async function AdminVotacionesPage() {
       </h1>
 
       <CreatePoll matches={matches} players={players} />
+
+      <VotePermissions coaches={coaches} />
 
       <div>
         <h2 className="eyebrow mb-2 px-1">Votaciones</h2>

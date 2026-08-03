@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, UserPlus } from "lucide-react";
 import { Switch } from "@/components/Switch";
 import {
   closePollNow,
@@ -12,14 +12,18 @@ import {
   setPollMonth,
   recalcPoll,
   excludeBallot,
+  authorizeRevote,
+  castBallotOnBehalf,
 } from "@/actions/poll";
 
 type Voter = {
-  playerId: string;
+  voterId: string;
   name: string;
+  kind: "player" | "coach";
   ballotId: string | null;
   excluded: boolean;
 };
+type Opt = { id: string; name: string };
 export type PollAdminData = {
   pollId: string;
   matchLabel: string;
@@ -31,7 +35,10 @@ export type PollAdminData = {
   eligibleCount: number;
   votedCount: number;
   voted: Voter[];
-  notVoted: { name: string }[];
+  notVoted: { voterId: string; name: string; kind: "player" | "coach" }[];
+  onBehalf: { ballotId: string; name: string; excluded: boolean }[];
+  candidates: Opt[];
+  noAccountPlayers: Opt[];
 };
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -65,6 +72,7 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
     ? Math.round((data.votedCount / data.eligibleCount) * 100)
     : 0;
   const cancelled = data.status === "CANCELLED";
+  const canRegisterOnBehalf = !cancelled && !data.effectiveClosed;
 
   return (
     <div className="card p-4">
@@ -118,7 +126,7 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
                   run(() => cancelPoll(data.pollId));
               }}
             >
-              Anular
+              Anular votación
             </button>
           </div>
 
@@ -174,12 +182,17 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
         <p className="mt-2 rounded-lg bg-amarillo/25 px-3 py-2 text-sm">{msg}</p>
       )}
 
+      {/* Voto excepcional en nombre de un jugador sin cuenta */}
+      {canRegisterOnBehalf && data.noAccountPlayers.length > 0 && (
+        <OnBehalf data={data} busy={busy} run={run} />
+      )}
+
       {/* Participación (sin mostrar el contenido de los votos) */}
       <details className="mt-3">
         <summary className="cursor-pointer text-xs font-semibold text-marino">
-          Ver participación
+          Ver participación y papeletas
         </summary>
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 space-y-3">
           <div>
             <p className="text-[11px] font-bold uppercase text-gris">
               Han votado ({data.voted.length})
@@ -190,28 +203,83 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
               <ul className="mt-1 space-y-1">
                 {data.voted.map((v) => (
                   <li
-                    key={v.playerId}
-                    className="flex items-center justify-between text-sm"
+                    key={v.voterId}
+                    className="flex items-center justify-between gap-2 text-sm"
                   >
                     <span className={v.excluded ? "text-gris line-through" : ""}>
                       {v.name}
                     </span>
                     {v.ballotId && (
-                      <button
-                        className="text-xs font-semibold text-marino disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() =>
-                          run(() => excludeBallot(v.ballotId!, !v.excluded))
-                        }
-                      >
-                        {v.excluded ? "Incluir" : "Excluir"}
-                      </button>
+                      <span className="flex gap-2">
+                        <button
+                          className="text-xs font-semibold text-marino disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() =>
+                            run(() => excludeBallot(v.ballotId!, !v.excluded))
+                          }
+                        >
+                          {v.excluded ? "Restaurar" : "Anular"}
+                        </button>
+                        <button
+                          className="text-xs font-semibold text-red-600 disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "¿Autorizar un nuevo voto? Se eliminará su papeleta actual y podrá volver a votar.",
+                              )
+                            )
+                              run(() => authorizeRevote(v.ballotId!));
+                          }}
+                        >
+                          Autorizar nuevo voto
+                        </button>
+                      </span>
                     )}
                   </li>
                 ))}
               </ul>
             )}
           </div>
+
+          {data.onBehalf.length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold uppercase text-gris">
+                Votos registrados por el entrenador ({data.onBehalf.length})
+              </p>
+              <ul className="mt-1 space-y-1">
+                {data.onBehalf.map((o) => (
+                  <li
+                    key={o.ballotId}
+                    className="flex items-center justify-between gap-2 text-sm"
+                  >
+                    <span className={o.excluded ? "text-gris line-through" : ""}>
+                      {o.name} (en su nombre)
+                    </span>
+                    <span className="flex gap-2">
+                      <button
+                        className="text-xs font-semibold text-marino disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() =>
+                          run(() => excludeBallot(o.ballotId, !o.excluded))
+                        }
+                      >
+                        {o.excluded ? "Restaurar" : "Anular"}
+                      </button>
+                      <button
+                        className="text-xs font-semibold text-red-600 disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => run(() => authorizeRevote(o.ballotId))}
+                      >
+                        Eliminar
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div>
             <p className="text-[11px] font-bold uppercase text-gris">
               No han votado ({data.notVoted.length})
@@ -222,6 +290,116 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
           </div>
         </div>
       </details>
+    </div>
+  );
+}
+
+function OnBehalf({
+  data,
+  busy,
+  run,
+}: {
+  data: PollAdminData;
+  busy: boolean;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>) => Promise<void>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [player, setPlayer] = React.useState("");
+  const [first, setFirst] = React.useState("");
+  const [second, setSecond] = React.useState("");
+  const [third, setThird] = React.useState("");
+
+  const opts = (exclude: string[]) =>
+    data.candidates
+      .filter((c) => !exclude.includes(c.id))
+      .map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ));
+
+  const complete =
+    player &&
+    first &&
+    second &&
+    third &&
+    new Set([first, second, third]).size === 3;
+
+  if (!open)
+    return (
+      <button
+        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-gris/30 px-2.5 py-1.5 text-xs font-semibold text-marino"
+        onClick={() => setOpen(true)}
+      >
+        <UserPlus size={13} /> Registrar voto de un jugador sin cuenta
+      </button>
+    );
+
+  return (
+    <div className="mt-3 space-y-2 rounded-xl bg-beige/60 p-3">
+      <p className="text-xs font-bold uppercase text-marino">
+        Voto en nombre de un jugador sin cuenta
+      </p>
+      <select
+        className="field"
+        value={player}
+        onChange={(e) => setPlayer(e.target.value)}
+      >
+        <option value="">Elegir jugador…</option>
+        {data.noAccountPlayers.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <div className="grid grid-cols-3 gap-2">
+        <select
+          className="field"
+          value={first}
+          onChange={(e) => setFirst(e.target.value)}
+        >
+          <option value="">3 pts</option>
+          {opts([second, third])}
+        </select>
+        <select
+          className="field"
+          value={second}
+          onChange={(e) => setSecond(e.target.value)}
+        >
+          <option value="">2 pts</option>
+          {opts([first, third])}
+        </select>
+        <select
+          className="field"
+          value={third}
+          onChange={(e) => setThird(e.target.value)}
+        >
+          <option value="">1 pt</option>
+          {opts([first, second])}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button
+          className="btn-primary flex-1"
+          disabled={busy || !complete}
+          onClick={() =>
+            run(() =>
+              castBallotOnBehalf(data.pollId, player, first, second, third),
+            ).then(() => {
+              setOpen(false);
+              setPlayer("");
+              setFirst("");
+              setSecond("");
+              setThird("");
+            })
+          }
+        >
+          Registrar voto
+        </button>
+        <button className="btn-ghost" onClick={() => setOpen(false)}>
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }

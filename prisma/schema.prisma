@@ -68,6 +68,7 @@ model User {
   player        Player?
   createdAt     DateTime @default(now())
   hideStandings Boolean  @default(false) // preferencia personal: ocultar clasificación oficial en HOME
+  canVote       Boolean  @default(false) // permiso para votar en "Jugador del Mes" (cuerpo técnico)
 }
 
 // ── Ficha del jugador (7) ─────────────────────────────────────────
@@ -371,9 +372,22 @@ model Ballot {
   firstId   String // 3 puntos
   secondId  String // 2 puntos
   thirdId   String // 1 punto
-  excluded  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  excluded     Boolean  @default(false)
+  onBehalfOfId String? // voto registrado por el entrenador en nombre de un jugador sin cuenta
+  createdAt    DateTime @default(now())
+  poll         Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
 
   @@unique([pollId, voterId])
+}
+
+// Registro interno de acciones administrativas sobre votaciones (13). No expone el contenido de las papeletas.
+model VoteLog {
+  id        String   @id @default(cuid())
+  pollId    String
+  ballotId  String?
+  adminId   String
+  adminName String
+  action    String
+  note      String?
+  createdAt DateTime @default(now())
 }

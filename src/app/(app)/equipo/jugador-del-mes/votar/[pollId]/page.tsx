@@ -15,7 +15,8 @@ export default async function VotarPage({
 }) {
   const session = await getSession();
   if (!session) redirect("/login");
-  if (session.role !== "PLAYER") redirect("/equipo/jugador-del-mes");
+  if (session.role !== "PLAYER" && session.role !== "COACH")
+    redirect("/equipo/jugador-del-mes");
 
   const poll = await pollById(params.pollId);
   if (!poll) notFound();
@@ -24,11 +25,22 @@ export default async function VotarPage({
   const accepting = poll.status === "OPEN" && now < poll.closesAt;
   if (!accepting) redirect("/equipo/jugador-del-mes");
 
-  const me = await prisma.player.findFirst({
-    where: { userId: session.userId, status: "ACTIVE" },
-    select: { id: true },
-  });
-  if (!me) redirect("/equipo/jugador-del-mes");
+  // Elegibilidad: jugador activo con cuenta, o entrenador con permiso de voto.
+  let myPlayerId: string | null = null;
+  if (session.role === "PLAYER") {
+    const me = await prisma.player.findFirst({
+      where: { userId: session.userId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!me) redirect("/equipo/jugador-del-mes");
+    myPlayerId = me.id;
+  } else {
+    const u = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { canVote: true },
+    });
+    if (!u?.canVote) redirect("/equipo/jugador-del-mes");
+  }
 
   const already = await prisma.ballot.findUnique({
     where: { pollId_voterId: { pollId: poll.id, voterId: session.userId } },
@@ -36,9 +48,9 @@ export default async function VotarPage({
   });
   if (already) redirect("/equipo/jugador-del-mes");
 
-  // Excluir al propio jugador si el voto propio no está permitido.
+  // Excluir al propio jugador si el voto propio no está permitido (no aplica al entrenador).
   const candidates = poll.candidates
-    .filter((c) => poll.allowSelfVote || c.id !== me.id)
+    .filter((c) => poll.allowSelfVote || !myPlayerId || c.id !== myPlayerId)
     .map((c) => ({
       id: c.id,
       firstName: c.firstName,

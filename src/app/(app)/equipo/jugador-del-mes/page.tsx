@@ -12,6 +12,7 @@ import {
 import { formatDateLong, formatDateTime } from "@/lib/format";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { MonthSelect } from "./MonthSelect";
+import { AutoRefresh } from "./AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -44,30 +45,46 @@ export default async function JugadorDelMesPage({
   const classification = await monthlyClassification(monthKey);
   const winners = await winnersHistory();
 
-  // Estado de la votación del último partido
+  const openNow = !!poll && poll.status === "OPEN" && now < poll.closesAt;
+
   let pollBlock: React.ReactNode = null;
   if (poll) {
-    const accepting = poll.status === "OPEN" && now < poll.closesAt;
     const cancelled = poll.status === "CANCELLED";
-    const closed = !cancelled && (poll.status === "CLOSED" || now >= poll.closesAt);
+    const accepting = poll.status === "OPEN" && now < poll.closesAt;
+    const closed = !cancelled && !accepting;
     const nameById = new Map(
       poll.candidates.map((c) => [c.id, `${c.firstName} ${c.lastName}`]),
     );
 
-    let voted = false;
-    if (!isCoach) {
-      const me = await prisma.player.findFirst({
-        where: { userId: session.userId },
-        select: { id: true },
-      });
-      const ballot = await prisma.ballot.findUnique({
-        where: { pollId_voterId: { pollId: poll.id, voterId: session.userId } },
-        select: { id: true },
-      });
-      voted = !!ballot && !!me;
+    // Elegibilidad y estado de voto del usuario actual (jugador o entrenador).
+    let canVote = false;
+    let myVoted = false;
+    if (!cancelled) {
+      if (isCoach) {
+        const u = await prisma.user.findUnique({
+          where: { id: session.userId },
+          select: { canVote: true },
+        });
+        canVote = !!u?.canVote;
+      } else {
+        const me = await prisma.player.findFirst({
+          where: { userId: session.userId, status: "ACTIVE" },
+          select: { id: true },
+        });
+        canVote = !!me;
+      }
+      if (canVote) {
+        const ballot = await prisma.ballot.findUnique({
+          where: {
+            pollId_voterId: { pollId: poll.id, voterId: session.userId },
+          },
+          select: { id: true },
+        });
+        myVoted = !!ballot;
+      }
     }
 
-    // Resultado (solo si cerrada): agregación por candidato
+    // Resultado definitivo (poll cerrada)
     let result: { name: string; points: number }[] = [];
     if (closed) {
       const ballots = await prisma.ballot.findMany({
@@ -90,6 +107,51 @@ export default async function JugadorDelMesPage({
     let admin: Awaited<ReturnType<typeof pollAdminData>> = null;
     if (isCoach) admin = await pollAdminData(poll.id);
 
+    const miVotacion = (
+      <div>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-marino">
+          Mi votación
+        </p>
+        {cancelled ? (
+          <p className="rounded-lg bg-gris/15 px-3 py-2 text-sm text-gris">
+            Esta votación fue anulada.
+          </p>
+        ) : !canVote ? (
+          <p className="rounded-lg bg-gris/15 px-3 py-2 text-sm text-gris">
+            No tienes permiso para votar en Jugador del Mes.
+          </p>
+        ) : accepting ? (
+          <>
+            {myVoted ? (
+              <p className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-sm font-semibold text-green-700">
+                <Check size={15} /> YA HE VOTADO
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-2 text-sm font-semibold text-red-700">
+                  ⚠ NO HE VOTADO
+                </p>
+                <Link
+                  href={`/equipo/jugador-del-mes/votar/${poll.id}`}
+                  className="btn-gold w-full"
+                >
+                  Votar ahora
+                </Link>
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gris">
+              Puedes votar hasta el {formatDateTime(poll.closesAt)}.
+            </p>
+          </>
+        ) : (
+          <p className="rounded-lg bg-beige px-3 py-2 text-sm text-negro">
+            La votación de este partido ha finalizado.
+            {myVoted ? " Participaste en ella." : ""}
+          </p>
+        )}
+      </div>
+    );
+
     pollBlock = (
       <div className="card overflow-hidden">
         <div className="bg-marino px-4 py-2.5 text-beige">
@@ -97,7 +159,7 @@ export default async function JugadorDelMesPage({
             Votación del último partido
           </p>
         </div>
-        <div className="space-y-3 p-4 text-sm">
+        <div className="space-y-4 p-4 text-sm">
           <p className="font-medium capitalize text-negro">
             {poll.activity.opponent
               ? `CD Gaztelueta vs ${poll.activity.opponent}`
@@ -105,78 +167,49 @@ export default async function JugadorDelMesPage({
             · {formatDateLong(poll.activity.date)}
           </p>
 
-          {cancelled && (
-            <p className="rounded-lg bg-gris/15 px-3 py-2 text-gris">
-              Esta votación fue anulada.
-            </p>
-          )}
+          {miVotacion}
 
-          {!cancelled && accepting && !isCoach && (
-            <>
-              {voted ? (
-                <p className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 font-semibold text-green-700">
-                  <Check size={15} /> YA HE VOTADO
+          {isCoach && (
+            <div className="border-t border-gris/10 pt-3">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-marino">
+                Gestionar votación
+              </p>
+              {admin && (
+                <p className="mb-2 text-xs text-gris">
+                  Participación: {admin.votedCount}/{admin.eligibleCount} (
+                  {admin.eligibleCount
+                    ? Math.round((admin.votedCount / admin.eligibleCount) * 100)
+                    : 0}
+                  %).
                 </p>
-              ) : (
-                <div className="space-y-2">
-                  <p className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-2 font-semibold text-red-700">
-                    ⚠ NO HE VOTADO
-                  </p>
-                  <Link
-                    href={`/equipo/jugador-del-mes/votar/${poll.id}`}
-                    className="btn-gold w-full"
-                  >
-                    Votar ahora
-                  </Link>
-                </div>
               )}
-              <p className="text-xs text-gris">
-                Puedes votar hasta el {formatDateTime(poll.closesAt)}.
-              </p>
-            </>
-          )}
-
-          {!cancelled && accepting && isCoach && admin && (
-            <p className="text-xs text-gris">
-              Participación: {admin.votedCount}/{admin.eligibleCount} (
-              {admin.eligibleCount
-                ? Math.round((admin.votedCount / admin.eligibleCount) * 100)
-                : 0}
-              %). Cierra el {formatDateTime(poll.closesAt)}.
-            </p>
-          )}
-
-          {closed && (
-            <div>
-              <p className="mb-1 text-xs font-semibold text-gris">
-                La votación de este partido ha finalizado.
-              </p>
-              {result.length === 0 ? (
-                <p className="text-xs text-gris">Sin votos registrados.</p>
-              ) : (
-                <ol className="space-y-1">
-                  {result.map((r, i) => (
-                    <li key={i} className="flex justify-between text-sm">
-                      <span>
-                        {i + 1}. {r.name}
-                      </span>
-                      <span className="font-semibold text-marino">
-                        {r.points} pts
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <Link
+                href="/equipo/jugador-del-mes/admin"
+                className="btn-ghost w-full"
+              >
+                <Settings size={15} /> Herramientas de la votación
+              </Link>
             </div>
           )}
 
-          {isCoach && (
-            <Link
-              href="/equipo/jugador-del-mes/admin"
-              className="btn-ghost w-full"
-            >
-              <Settings size={15} /> Gestionar votaciones
-            </Link>
+          {closed && result.length > 0 && (
+            <div className="border-t border-gris/10 pt-3">
+              <p className="mb-1 text-xs font-semibold text-gris">
+                Resultado de este partido
+              </p>
+              <ol className="space-y-1">
+                {result.map((r, i) => (
+                  <li key={i} className="flex justify-between text-sm">
+                    <span>
+                      {i + 1}. {r.name}
+                    </span>
+                    <span className="font-semibold text-marino">
+                      {r.points} pts
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
         </div>
       </div>
@@ -196,6 +229,7 @@ export default async function JugadorDelMesPage({
 
   return (
     <div className="space-y-5">
+      {openNow && <AutoRefresh seconds={15} />}
       <Link
         href="/equipo"
         className="inline-flex items-center gap-1 text-sm text-gris hover:text-negro"
@@ -208,9 +242,20 @@ export default async function JugadorDelMesPage({
 
       {pollBlock}
 
-      {/* Clasificación mensual */}
+      {/* Clasificación mensual (provisional mientras haya votación abierta) */}
       <div>
         <h2 className="eyebrow mb-2 px-1">Clasificación mensual</h2>
+        {poll &&
+          (openNow ? (
+            <p className="mb-2 rounded-lg bg-amarillo/20 px-3 py-2 text-xs text-negro">
+              Clasificación provisional. La votación continúa abierta hasta el
+              martes a las 23:59.
+            </p>
+          ) : poll.status !== "CANCELLED" ? (
+            <p className="mb-2 rounded-lg bg-beige px-3 py-2 text-xs text-negro">
+              Votación cerrada. Clasificación definitiva de este partido.
+            </p>
+          ) : null)}
         <MonthSelect year={year} month0={month0} />
         <div className="mt-2 space-y-2">
           {classification.length === 0 ? (
