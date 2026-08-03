@@ -379,3 +379,37 @@ export async function pollAdminData(pollId: string) {
     onBehalf,
   };
 }
+
+// ───────────────────── LIGA interna: puntos por ejercicio ─────────────────────
+
+// Entradas ya asignadas de un ejercicio (para precargar "ASIGNAR PUNTOS").
+export async function exerciseEntries(exerciseId: string) {
+  return prisma.leaguePointEntry.findMany({
+    where: { exerciseId },
+    select: { playerId: true, points: true, note: true },
+  });
+}
+
+// Historial de puntos de LIGA de un jugador. priorBalance = saldo anterior no
+// itemizado (ajustes manuales/históricos previos a esta función).
+export async function playerLeagueHistory(playerId: string) {
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { leaguePoints: true },
+  });
+  const entries = await prisma.leaguePointEntry.findMany({
+    where: { playerId },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      date: true,
+      exerciseName: true,
+      exerciseId: true,
+      points: true,
+      note: true,
+    },
+  });
+  const sum = entries.reduce((a, e) => a + e.points, 0);
+  const total = player?.leaguePoints ?? 0;
+  return { total, priorBalance: total - sum, entries };
+}

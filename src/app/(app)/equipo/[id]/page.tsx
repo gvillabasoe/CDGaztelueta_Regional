@@ -3,8 +3,11 @@ import Link from "next/link";
 import { ChevronLeft, Star } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { playerLeagueHistory, currentPlayer } from "@/lib/queries";
+import { formatDateShort } from "@/lib/format";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { FichaForm, type FichaData } from "../FichaForm";
+import { LeagueHistory } from "../LeagueHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,15 @@ export default async function FichaPage({
   const p = await prisma.player.findUnique({ where: { id: params.id } });
   if (!p) notFound();
   const isCoach = session?.role === "COACH";
+
+  const hist = await playerLeagueHistory(p.id);
+  const histEntries = hist.entries.map((e) => ({
+    id: e.id,
+    dateLabel: formatDateShort(e.date),
+    exerciseName: e.exerciseName,
+    points: e.points,
+    note: e.note,
+  }));
 
   const back = (
     <Link
@@ -53,9 +65,19 @@ export default async function FichaPage({
           Editar ficha
         </h1>
         <FichaForm mode="edit" playerId={p.id} initial={initial} />
+        <LeagueHistory
+          total={hist.total}
+          priorBalance={hist.priorBalance}
+          entries={histEntries}
+          editable
+        />
       </div>
     );
   }
+
+  // Solo el propio jugador ve el detalle de su historial (35).
+  const me = await currentPlayer();
+  const isOwn = me?.id === p.id;
 
   // Vista de solo lectura (jugador)
   const stats: [string, number][] = [
@@ -113,6 +135,15 @@ export default async function FichaPage({
           ))}
         </div>
       </div>
+
+      {isOwn && (
+        <LeagueHistory
+          total={hist.total}
+          priorBalance={hist.priorBalance}
+          entries={histEntries}
+          editable={false}
+        />
+      )}
     </div>
   );
 }

@@ -82,6 +82,15 @@ export type ExerciseInput = {
   description: string | null;
   objective: string | null;
   duration: string | null;
+  scorable: boolean;
+  maxPoints: number | null;
+  scoringInfo: string | null;
+};
+
+export type AssignEntry = {
+  playerId: string;
+  points: number;
+  note: string | null;
 };
 
 // ── Registros posteriores (8.6 / 8.7) ─────────────────────────────

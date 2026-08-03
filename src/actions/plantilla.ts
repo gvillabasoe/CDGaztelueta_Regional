@@ -183,6 +183,33 @@ export async function mergePlayers(keepId: string, mergeId: string) {
       data: { thirdId: keepId },
     });
 
+    // Historial de puntos de LIGA: mover; si colisiona por (ejercicio, jugador),
+    // sumar los puntos al registro de keep y descartar el duplicado.
+    const keepEntries = await tx.leaguePointEntry.findMany({
+      where: { playerId: keepId, exerciseId: { not: null } },
+      select: { id: true, exerciseId: true },
+    });
+    const keepByEx = new Map(keepEntries.map((e) => [e.exerciseId, e.id]));
+    const mergeEntries = await tx.leaguePointEntry.findMany({
+      where: { playerId: mergeId },
+      select: { id: true, exerciseId: true, points: true },
+    });
+    for (const e of mergeEntries) {
+      const dest = e.exerciseId ? keepByEx.get(e.exerciseId) : undefined;
+      if (dest) {
+        await tx.leaguePointEntry.update({
+          where: { id: dest },
+          data: { points: { increment: e.points } },
+        });
+        await tx.leaguePointEntry.delete({ where: { id: e.id } });
+      } else {
+        await tx.leaguePointEntry.update({
+          where: { id: e.id },
+          data: { playerId: keepId },
+        });
+      }
+    }
+
     // 3) Relaciones con @@unique(x, playerId): mover si no colisiona; si no, descartar la duplicada.
     const moveUnique = async (
       rows: { id: string; key: string }[],

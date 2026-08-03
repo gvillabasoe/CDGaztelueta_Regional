@@ -35,6 +35,12 @@ export async function saveExercises(activityId: string, list: ExerciseInput[]) {
         objective: e.objective?.trim() || null,
         duration: e.duration?.trim() || null,
         orderIndex: i,
+        scorable: !!e.scorable,
+        maxPoints:
+          e.maxPoints != null && Number.isFinite(e.maxPoints)
+            ? Math.round(e.maxPoints)
+            : null,
+        scoringInfo: e.scoringInfo?.trim() || null,
       };
       if (e.id) {
         await tx.exercise.update({ where: { id: e.id }, data });
@@ -71,5 +77,35 @@ export async function deleteActivityFile(activityId: string) {
     data: { fileName: null, fileMime: null, fileData: null },
   });
   revalidatePath(`/planificacion/actividad/${activityId}`);
+  return { ok: true as const };
+}
+
+// Documento o imagen específico de un ejercicio (23). Solo el entrenador.
+export async function uploadExerciseFile(
+  exerciseId: string,
+  file: { name: string; mime: string; dataBase64: string },
+) {
+  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
+  const ex = await prisma.exercise.update({
+    where: { id: exerciseId },
+    data: {
+      exFileName: file.name,
+      exFileMime: file.mime,
+      exFileData: Buffer.from(file.dataBase64, "base64"),
+    },
+    select: { activityId: true },
+  });
+  revalidatePath(`/planificacion/actividad/${ex.activityId}`);
+  return { ok: true as const };
+}
+
+export async function deleteExerciseFile(exerciseId: string) {
+  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
+  const ex = await prisma.exercise.update({
+    where: { id: exerciseId },
+    data: { exFileName: null, exFileMime: null, exFileData: null },
+    select: { activityId: true },
+  });
+  revalidatePath(`/planificacion/actividad/${ex.activityId}`);
   return { ok: true as const };
 }

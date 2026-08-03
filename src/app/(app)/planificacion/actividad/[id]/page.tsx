@@ -19,6 +19,8 @@ import { isTrainingAttendanceClosed } from "@/lib/deadlines";
 import { formatDateLong } from "@/lib/format";
 import { AttendancePanel } from "./AttendancePanel";
 import { ExercisesEditor } from "./ExercisesEditor";
+import { ExerciseList } from "./ExerciseList";
+import { ScoringManager } from "./ScoringManager";
 import { PdfManager } from "./PdfManager";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +46,31 @@ export default async function ActivityPage({
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
     select: { id: true, firstName: true, lastName: true, photo: true },
   });
+
+  const rosterLite = roster.map((p) => ({
+    id: p.id,
+    name: `${p.firstName} ${p.lastName}`,
+  }));
+  const exIds = activity.exercises.map((e) => e.id);
+  const leagueEntries =
+    isCoach && exIds.length
+      ? await prisma.leaguePointEntry.findMany({
+          where: { exerciseId: { in: exIds } },
+          select: { exerciseId: true, playerId: true, points: true, note: true },
+        })
+      : [];
+  const entriesByExercise: Record<
+    string,
+    { playerId: string; points: number; note: string | null }[]
+  > = {};
+  for (const e of leagueEntries) {
+    if (!e.exerciseId) continue;
+    (entriesByExercise[e.exerciseId] ??= []).push({
+      playerId: e.playerId,
+      points: e.points,
+      note: e.note,
+    });
+  }
 
   const attMap = new Map(activity.attendance.map((a) => [a.playerId, a]));
   const attendancePlayers = roster.map((p) => {
@@ -179,48 +206,53 @@ export default async function ActivityPage({
               <h2 className="font-semibold text-negro">Ejercicios</h2>
             </div>
             {isCoach ? (
-              <ExercisesEditor
-                activityId={activity.id}
-                initial={activity.exercises.map((e) => ({
+              <>
+                <ExercisesEditor
+                  activityId={activity.id}
+                  initial={activity.exercises.map((e) => ({
+                    id: e.id,
+                    task: e.task,
+                    description: e.description,
+                    objective: e.objective,
+                    duration: e.duration,
+                    scorable: e.scorable,
+                    maxPoints: e.maxPoints,
+                    scoringInfo: e.scoringInfo,
+                  }))}
+                />
+                {activity.exercises.length > 0 && (
+                  <div className="mt-4 border-t border-gris/10 pt-4">
+                    <p className="eyebrow mb-2">Puntuación y archivos</p>
+                    <ScoringManager
+                      roster={rosterLite}
+                      entriesByExercise={entriesByExercise}
+                      exercises={activity.exercises.map((e) => ({
+                        id: e.id,
+                        task: e.task,
+                        scorable: e.scorable,
+                        maxPoints: e.maxPoints,
+                        hasFile: !!e.exFileName,
+                        fileName: e.exFileName,
+                      }))}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <ExerciseList
+                exercises={activity.exercises.map((e) => ({
                   id: e.id,
                   task: e.task,
                   description: e.description,
                   objective: e.objective,
                   duration: e.duration,
+                  scorable: e.scorable,
+                  maxPoints: e.maxPoints,
+                  scoringInfo: e.scoringInfo,
+                  hasFile: !!e.exFileName,
+                  fileName: e.exFileName,
                 }))}
               />
-            ) : activity.exercises.length === 0 ? (
-              <p className="text-sm text-gris">
-                Sin ejercicios publicados todavía.
-              </p>
-            ) : (
-              <ol className="space-y-2">
-                {activity.exercises.map((e, i) => (
-                  <li
-                    key={e.id}
-                    className="rounded-xl border border-gris/20 p-3"
-                  >
-                    <p className="font-medium text-negro">
-                      {i + 1}. {e.task}
-                      {e.duration ? (
-                        <span className="ml-2 text-xs font-normal text-gris">
-                          · {e.duration}
-                        </span>
-                      ) : null}
-                    </p>
-                    {e.description && (
-                      <p className="mt-1 text-sm text-negro/80">
-                        {e.description}
-                      </p>
-                    )}
-                    {e.objective && (
-                      <p className="mt-1 text-xs text-gris">
-                        Objetivo: {e.objective}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ol>
             )}
           </section>
         </>

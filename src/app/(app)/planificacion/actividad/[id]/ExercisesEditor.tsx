@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Save } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Loader2,
+  Save,
+  Trophy,
+} from "lucide-react";
+import { Switch } from "@/components/Switch";
 import { saveExercises } from "@/actions/activity";
 import type { ExerciseInput } from "@/lib/types";
 
@@ -13,6 +22,9 @@ type Draft = {
   description: string;
   objective: string;
   duration: string;
+  scorable: boolean;
+  maxPoints: string;
+  scoringInfo: string;
 };
 
 let c = 0;
@@ -34,6 +46,9 @@ export function ExercisesEditor({
       description: e.description ?? "",
       objective: e.objective ?? "",
       duration: e.duration ?? "",
+      scorable: e.scorable,
+      maxPoints: e.maxPoints != null ? String(e.maxPoints) : "",
+      scoringInfo: e.scoringInfo ?? "",
     })),
   );
   const [saving, setSaving] = React.useState(false);
@@ -42,7 +57,16 @@ export function ExercisesEditor({
   function add() {
     setDrafts((d) => [
       ...d,
-      { key: uid(), task: "", description: "", objective: "", duration: "" },
+      {
+        key: uid(),
+        task: "",
+        description: "",
+        objective: "",
+        duration: "",
+        scorable: false,
+        maxPoints: "",
+        scoringInfo: "",
+      },
     ]);
   }
   function patch(key: string, p: Partial<Draft>) {
@@ -72,6 +96,9 @@ export function ExercisesEditor({
         description: d.description.trim() || null,
         objective: d.objective.trim() || null,
         duration: d.duration.trim() || null,
+        scorable: d.scorable,
+        maxPoints: d.maxPoints.trim() ? parseInt(d.maxPoints, 10) : null,
+        scoringInfo: d.scoringInfo.trim() || null,
       }));
     const res = await saveExercises(activityId, payload);
     setSaving(false);
@@ -82,9 +109,20 @@ export function ExercisesEditor({
   return (
     <div className="space-y-3">
       {drafts.map((d, i) => (
-        <div key={d.key} className="rounded-xl border border-gris/20 p-3">
+        <div
+          key={d.key}
+          className={
+            "rounded-xl border p-3 " +
+            (d.scorable
+              ? "border-dorado bg-dorado/5"
+              : "border-gris/20")
+          }
+        >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-bold text-gris">Ejercicio {i + 1}</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-gris">
+              {d.scorable && <Trophy size={13} className="text-dorado" />}
+              Ejercicio {i + 1}
+            </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => move(i, -1)}
@@ -139,6 +177,41 @@ export function ExercisesEditor({
                 onChange={(e) => patch(d.key, { duration: e.target.value })}
               />
             </div>
+
+            <div className="flex items-center justify-between rounded-lg bg-beige px-3 py-2">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-negro">
+                <Trophy size={15} className="text-dorado" />
+                Ejercicio puntuable para la liga interna
+              </span>
+              <Switch
+                checked={d.scorable}
+                onChange={(v) => patch(d.key, { scorable: v })}
+                label="Ejercicio puntuable"
+              />
+            </div>
+
+            {d.scorable && (
+              <div className="space-y-2 rounded-lg border border-dorado/40 p-2">
+                <input
+                  className="field"
+                  inputMode="numeric"
+                  placeholder="Máximo de puntos (opcional)"
+                  value={d.maxPoints}
+                  onChange={(e) => patch(d.key, { maxPoints: e.target.value })}
+                />
+                <textarea
+                  className="field"
+                  rows={2}
+                  placeholder="Sistema de puntuación (opcional). Ej.: Ganador 5, segundo 3, tercero 1."
+                  value={d.scoringInfo}
+                  onChange={(e) => patch(d.key, { scoringInfo: e.target.value })}
+                />
+                <p className="text-[11px] text-gris">
+                  Marcar como puntuable no asigna puntos. Guarda y usa “Asignar
+                  puntos” tras el entrenamiento.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       ))}
