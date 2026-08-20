@@ -52,6 +52,11 @@ enum PollStatus {
   CANCELLED
 }
 
+enum DocKind {
+  REGIMEN_INTERNO
+  GRUPOS_MATERIAL
+}
+
 enum ProposalStatus {
   PENDIENTE
   EN_REVISION
@@ -109,6 +114,7 @@ model Player {
   subsIn          Substitution[]   @relation("SubIn")
   subsOut         Substitution[]   @relation("SubOut")
   pollCandidacies Poll[]           @relation("PollCandidates")
+  leagueEntries   LeaguePointEntry[]
 }
 
 // ── Datos generales del club (1) ──────────────────────────────────
@@ -187,6 +193,7 @@ model Activity {
   trainingRecord TrainingRecord?
   matchRecord    MatchRecord?
   poll           Poll?
+  leagueEntries  LeaguePointEntry[]
 }
 
 // Ejercicio de un entrenamiento (8.4.2)
@@ -198,8 +205,15 @@ model Exercise {
   objective   String?
   duration    String?
   orderIndex  Int              @default(0)
+  scorable    Boolean          @default(false) // puntúa para la LIGA interna (21)
+  maxPoints   Int? // máximo de puntos, informativo (22)
+  scoringInfo String? // explicación del sistema de puntuación (22)
+  exFileData  Bytes? // documento/imagen del ejercicio (23)
+  exFileName  String?
+  exFileMime  String?
   activity    Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
   ratings     ExerciseRating[]
+  pointEntries LeaguePointEntry[]
 }
 
 // Valoración de un ejercicio por un jugador (8.8)
@@ -390,4 +404,39 @@ model VoteLog {
   action    String
   note      String?
   createdAt DateTime @default(now())
+}
+
+// Historial de puntos de la LIGA interna (27-30). El total sigue en Player.leaguePoints
+// (única fuente de verdad); cada asignación ajusta ese total por su diferencia.
+model LeaguePointEntry {
+  id           String    @id @default(cuid())
+  playerId     String
+  exerciseId   String? // null = ajuste manual / histórico (no se inventa ejercicio)
+  activityId   String?
+  exerciseName String? // nombre del ejercicio en el momento de la asignación (se conserva aunque se borre)
+  date         DateTime  @default(now())
+  points       Int
+  note         String?
+  coachId      String
+  coachName    String
+  createdAt    DateTime  @default(now())
+
+  player   Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  exercise Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+  activity Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  @@unique([exerciseId, playerId])
+}
+
+// Documento PDF vigente del equipo por categoría (Régimen Interno / Grupos de Material).
+// Una fila como máximo por categoría: la sustitución actualiza la misma fila.
+model TeamDocument {
+  id            String   @id @default(cuid())
+  kind          DocKind  @unique
+  fileData      Bytes
+  fileName      String
+  fileMime      String
+  updatedAt     DateTime @updatedAt
+  updatedById   String?
+  updatedByName String?
 }
