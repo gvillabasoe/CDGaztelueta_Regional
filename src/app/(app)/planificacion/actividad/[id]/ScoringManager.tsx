@@ -119,17 +119,27 @@ function ExerciseCard({
 
   async function upload(file: File) {
     setBusy(true);
-    const payload = await fileToB64(file);
-    await uploadExerciseFile(ex.id, payload);
-    setBusy(false);
-    router.refresh();
+    try {
+      const payload = await fileToB64(file);
+      await uploadExerciseFile(ex.id, payload);
+      router.refresh();
+    } catch (err) {
+      console.error("subir archivo de ejercicio", err);
+    } finally {
+      setBusy(false);
+    }
   }
   async function removeFile() {
     if (!confirm("¿Eliminar el archivo de este ejercicio?")) return;
     setBusy(true);
-    await deleteExerciseFile(ex.id);
-    setBusy(false);
-    router.refresh();
+    try {
+      await deleteExerciseFile(ex.id);
+      router.refresh();
+    } catch (err) {
+      console.error("eliminar archivo de ejercicio", err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -251,14 +261,20 @@ function AssignPanel({
         points: parseInt(r.raw, 10),
         note: r.note.trim() || null,
       }));
-    const res = await assignExercisePoints(ex.id, payload);
-    setBusy(false);
-    if (!res.ok) {
-      setMsg(res.error);
-      return;
+    try {
+      const res = await assignExercisePoints(ex.id, payload);
+      if (!res.ok) {
+        setMsg(res.error);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error("asignar puntos", err);
+      setMsg("No se han podido asignar los puntos. Inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
     }
-    setOpen(false);
-    router.refresh();
   }
 
   if (!open)

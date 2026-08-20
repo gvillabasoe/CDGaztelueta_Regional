@@ -53,6 +53,7 @@ export function ExercisesEditor({
   );
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   function add() {
     setDrafts((d) => [
@@ -86,8 +87,7 @@ export function ExercisesEditor({
   }
 
   async function save() {
-    setSaving(true);
-    setMsg(null);
+    // Validación mínima: el nombre o tarea sigue siendo obligatorio.
     const payload: ExerciseInput[] = drafts
       .filter((d) => d.task.trim())
       .map((d) => ({
@@ -100,10 +100,43 @@ export function ExercisesEditor({
         maxPoints: d.maxPoints.trim() ? parseInt(d.maxPoints, 10) : null,
         scoringInfo: d.scoringInfo.trim() || null,
       }));
-    const res = await saveExercises(activityId, payload);
-    setSaving(false);
-    setMsg(res.ok ? "Ejercicios guardados." : res.error);
-    if (res.ok) router.refresh();
+
+    if (drafts.length > 0 && payload.length === 0) {
+      setMsg(null);
+      setError("Escribe al menos el nombre o la tarea del ejercicio.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const res = await saveExercises(activityId, payload);
+      if (!res.ok) {
+        // Los datos introducidos se conservan en el formulario.
+        setError(res.error);
+        return;
+      }
+      // Se reutilizan los ids devueltos: un reintento actualiza en lugar de duplicar.
+      if (res.ids) {
+        const ids = res.ids;
+        setDrafts((ds) => {
+          let k = 0;
+          return ds.map((d) =>
+            d.task.trim() ? { ...d, id: ids[k++] ?? d.id } : d,
+          );
+        });
+      }
+      setMsg("Ejercicio guardado correctamente.");
+      router.refresh();
+    } catch (err) {
+      // Cualquier fallo inesperado (red, servidor) también termina la carga.
+      console.error("guardar ejercicios", err);
+      setError("No se ha podido guardar el ejercicio. Inténtalo de nuevo.");
+    } finally {
+      // El estado de carga finaliza SIEMPRE, en éxito y en error.
+      setSaving(false);
+    }
   }
 
   return (
@@ -220,7 +253,16 @@ export function ExercisesEditor({
         <Plus size={16} /> Añadir ejercicio
       </button>
 
-      {msg && <p className="rounded-lg bg-beige px-3 py-2 text-sm">{msg}</p>}
+      {msg && (
+        <p className="rounded-lg bg-green-100 px-3 py-2 text-sm font-medium text-green-700">
+          {msg}
+        </p>
+      )}
+      {error && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700">
+          {error}
+        </p>
+      )}
 
       <button className="btn-primary w-full" onClick={save} disabled={saving}>
         {saving ? (
@@ -228,7 +270,7 @@ export function ExercisesEditor({
         ) : (
           <Save size={16} />
         )}
-        Guardar ejercicios
+        {saving ? "Guardando…" : "GUARDAR EJERCICIO"}
       </button>
     </div>
   );

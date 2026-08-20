@@ -57,3 +57,16 @@ export function formatDateTime(d: Date): string {
     timeZone: "Europe/Madrid",
   }).format(d);
 }
+
+// Fecha + hora corta en Europe/Madrid, p. ej. "12/08/2026, 19:30".
+export function formatDateTimeShort(d: Date): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Madrid",
+  }).format(d);
+}

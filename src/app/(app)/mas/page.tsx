@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { MessageSquare, User, Settings, ChevronRight } from "lucide-react";
+import {
+  MessageSquare,
+  User,
+  Settings,
+  ChevronRight,
+  BookOpen,
+  Package,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +22,18 @@ const items = [
     label: "Perfil personal",
     desc: "Tu información y valoraciones",
     icon: User,
+  },
+  {
+    href: "/mas/regimen-interno",
+    label: "Régimen Interno",
+    desc: "Normas internas del equipo",
+    icon: BookOpen,
+  },
+  {
+    href: "/mas/grupos-material",
+    label: "Grupos de Material",
+    desc: "Organización del material",
+    icon: Package,
   },
   {
     href: "/mas/config",

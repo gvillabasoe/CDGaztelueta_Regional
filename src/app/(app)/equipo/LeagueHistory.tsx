@@ -44,18 +44,28 @@ export function LeagueHistory({
   }
   async function saveEdit(id: string) {
     setBusy(true);
-    await updateLeaguePointEntry(id, parseInt(pts, 10) || 0, note.trim() || null);
-    setBusy(false);
-    setEditing(null);
-    router.refresh();
+    try {
+      await updateLeaguePointEntry(id, parseInt(pts, 10) || 0, note.trim() || null);
+      setEditing(null);
+      router.refresh();
+    } catch (err) {
+      console.error("editar puntos", err);
+    } finally {
+      setBusy(false);
+    }
   }
   async function del(id: string) {
     if (!confirm("¿Eliminar este registro? Se retirarán solo sus puntos."))
       return;
     setBusy(true);
-    await deleteLeaguePointEntry(id);
-    setBusy(false);
-    router.refresh();
+    try {
+      await deleteLeaguePointEntry(id);
+      router.refresh();
+    } catch (err) {
+      console.error("eliminar puntos", err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

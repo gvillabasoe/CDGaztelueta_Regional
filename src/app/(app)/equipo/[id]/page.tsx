@@ -2,8 +2,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Star } from "lucide-react";
 import { getSession } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
-import { playerLeagueHistory, currentPlayer } from "@/lib/queries";
+import {
+  playerLeagueHistory,
+  currentPlayer,
+  findPlayerByAnyId,
+} from "@/lib/queries";
 import { formatDateShort } from "@/lib/format";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { FichaForm, type FichaData } from "../FichaForm";
@@ -17,7 +20,8 @@ export default async function FichaPage({
   params: { id: string };
 }) {
   const session = await getSession();
-  const p = await prisma.player.findUnique({ where: { id: params.id } });
+  // Admite id de ficha o id de cuenta; si no existe, estado controlado (not-found).
+  const p = await findPlayerByAnyId(params.id);
   if (!p) notFound();
   const isCoach = session?.role === "COACH";
 
@@ -51,12 +55,12 @@ export default async function FichaPage({
       photo: p.photo,
       email: p.email,
       phone: p.phone,
-      status: p.status as "ACTIVE" | "INACTIVE" | "PENDING",
-      callups: p.callups,
-      minutes: p.minutes,
-      starts: p.starts,
-      benchCount: p.benchCount,
-      goalsCount: p.goalsCount,
+      status: (p.status ?? "ACTIVE") as "ACTIVE" | "INACTIVE" | "PENDING",
+      callups: p.callups ?? 0,
+      minutes: p.minutes ?? 0,
+      starts: p.starts ?? 0,
+      benchCount: p.benchCount ?? 0,
+      goalsCount: p.goalsCount ?? 0,
     };
     return (
       <div className="space-y-4">
@@ -80,12 +84,14 @@ export default async function FichaPage({
   const isOwn = me?.id === p.id;
 
   // Vista de solo lectura (jugador)
+  // Un valor ausente o no numérico se muestra siempre como 0 (nunca undefined/null/NaN).
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const stats: [string, number][] = [
-    ["Convocatorias", p.callups],
-    ["Minutos", p.minutes],
-    ["Titularidades", p.starts],
-    ["Suplencias", p.benchCount],
-    ["Goles", p.goalsCount],
+    ["Convocatorias", num(p.callups)],
+    ["Minutos", num(p.minutes)],
+    ["Titularidades", num(p.starts)],
+    ["Suplencias", num(p.benchCount)],
+    ["Goles", num(p.goalsCount)],
   ];
 
   return (
@@ -94,14 +100,14 @@ export default async function FichaPage({
       <div className="card p-5">
         <div className="flex items-center gap-4">
           <PlayerAvatar
-            photo={p.photo}
-            firstName={p.firstName}
-            lastName={p.lastName}
+            photo={p.photo ?? null}
+            firstName={p.firstName ?? ""}
+            lastName={p.lastName ?? ""}
             size={72}
           />
           <div>
             <h1 className="flex items-center gap-2 font-display text-xl font-semibold text-negro">
-              {p.firstName} {p.lastName}
+              {`${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || "Jugador"}
               {p.isCaptain && <Star size={16} className="text-dorado" />}
             </h1>
             {p.nickname && <p className="text-sm text-gris">“{p.nickname}”</p>}
@@ -112,7 +118,7 @@ export default async function FichaPage({
               {p.age != null && (
                 <span className="chip bg-beige text-negro">{p.age} años</span>
               )}
-              {p.positions.map((pos) => (
+              {(p.positions ?? []).map((pos) => (
                 <span key={pos} className="chip bg-dorado/20 text-marino">
                   {pos}
                 </span>

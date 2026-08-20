@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import type { DocKind } from "@/lib/types";
 
 // Jugador asociado al usuario de la sesión (o null si es entrenador).
 export async function currentPlayer() {
@@ -397,19 +398,65 @@ export async function playerLeagueHistory(playerId: string) {
     where: { id: playerId },
     select: { leaguePoints: true },
   });
-  const entries = await prisma.leaguePointEntry.findMany({
-    where: { playerId },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      date: true,
-      exerciseName: true,
-      exerciseId: true,
-      points: true,
-      note: true,
-    },
-  });
-  const sum = entries.reduce((a, e) => a + e.points, 0);
   const total = player?.leaguePoints ?? 0;
+
+  // El detalle del historial no debe poder tumbar la ficha: si su consulta falla
+  // (p. ej. tabla no migrada todavía) se registra y se devuelve el total, que es
+  // la fuente de verdad de la LIGA interna.
+  type Entry = {
+    id: string;
+    date: Date;
+    exerciseName: string | null;
+    exerciseId: string | null;
+    points: number;
+    note: string | null;
+  };
+  let entries: Entry[] = [];
+  try {
+    entries = await prisma.leaguePointEntry.findMany({
+      where: { playerId },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        date: true,
+        exerciseName: true,
+        exerciseId: true,
+        points: true,
+        note: true,
+      },
+    });
+  } catch (err) {
+    console.error("playerLeagueHistory", playerId, err);
+    entries = [];
+  }
+
+  const sum = entries.reduce((a, e) => a + e.points, 0);
   return { total, priorBalance: total - sum, entries };
+}
+
+// Resuelve una ficha admitiendo tanto el id de jugador como el id de la cuenta,
+// para que la pantalla nunca falle por recibir un identificador de otro tipo
+// ni muestre la ficha de otro jugador.
+export async function findPlayerByAnyId(id: string) {
+  if (!id) return null;
+  const byPlayer = await prisma.player.findUnique({ where: { id } });
+  if (byPlayer) return byPlayer;
+  return prisma.player.findFirst({ where: { userId: id } });
+}
+
+// ───────────────── Documentos del equipo (Régimen Interno / Material) ─────────────────
+
+// Devuelve el documento vigente de una categoría. Si la consulta falla (por
+// ejemplo, tabla aún no migrada) se registra y se devuelve null: la pantalla
+// muestra el estado vacío controlado en lugar de romper la aplicación.
+export async function teamDocument(kind: DocKind) {
+  try {
+    return await prisma.teamDocument.findUnique({
+      where: { kind },
+      select: { fileName: true, fileMime: true, updatedAt: true },
+    });
+  } catch (err) {
+    console.error("teamDocument", kind, err);
+    return null;
+  }
 }

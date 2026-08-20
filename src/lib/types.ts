@@ -205,3 +205,6 @@ export type BallotInput = {
   secondId: string; // 2 puntos
   thirdId: string; // 1 punto
 };
+
+// Categorías de documento del equipo (Régimen Interno / Grupos de Material).
+export type DocKind = "REGIMEN_INTERNO" | "GRUPOS_MATERIAL";
