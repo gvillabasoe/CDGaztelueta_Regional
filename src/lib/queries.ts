@@ -144,6 +144,9 @@ export async function finesForMonth(year: number, month: number) {
       player: {
         select: { id: true, firstName: true, lastName: true, number: true },
       },
+      staffUser: {
+        select: { id: true, username: true, displayName: true },
+      },
     },
     orderBy: { date: "asc" },
   });
@@ -458,5 +461,94 @@ export async function teamDocument(kind: DocKind) {
   } catch (err) {
     console.error("teamDocument", kind, err);
     return null;
+  }
+}
+
+// ─────────────────── Multas: miembros sancionables y deuda personal ───────────────────
+
+// Cuerpo técnico sancionable: cuentas con rol de entrenador.
+export async function staffLite() {
+  const staff = await prisma.user.findMany({
+    where: { role: "COACH" },
+    orderBy: [{ displayName: "asc" }, { username: "asc" }],
+    select: { id: true, username: true, displayName: true },
+  });
+  return staff.map((u) => ({
+    id: u.id,
+    name: u.displayName?.trim() || u.username,
+  }));
+}
+
+// Cantidad pagada efectiva (compatible con multas antiguas marcadas "paid" sin importe).
+export function paidOfFine(f: {
+  amountPaid: number;
+  paid: boolean;
+  amount: number;
+}) {
+  return Math.min(
+    f.amountPaid > 0 ? f.amountPaid : f.paid ? f.amount : 0,
+    f.amount,
+  );
+}
+
+// LÓGICA CENTRAL de deuda personal: alimenta el punto rojo del menú y la
+// tarjeta "MIS MULTAS", de modo que nunca puedan contradecirse.
+// Incluye todas las multas del usuario (mes actual y meses anteriores) y
+// considera deuda cualquier cantidad pendiente > 0 (también en pagos parciales).
+export async function myFinesSummary() {
+  const s = await getSession();
+  if (!s) return { pending: 0, total: 0, paid: 0, count: 0, hasDebt: false };
+
+  try {
+    const me = await prisma.player.findFirst({
+      where: { userId: s.userId },
+      select: { id: true },
+    });
+
+    const or: { playerId?: string; staffUserId?: string }[] = [
+      { staffUserId: s.userId },
+    ];
+    if (me) or.push({ playerId: me.id });
+
+    const fines = await prisma.fine.findMany({
+      where: { OR: or },
+      select: { amount: true, amountPaid: true, paid: true },
+    });
+
+    let total = 0,
+      paid = 0;
+    for (const f of fines) {
+      total += f.amount;
+      paid += paidOfFine(f);
+    }
+    const pending = Math.max(0, total - paid);
+    return {
+      pending,
+      total,
+      paid,
+      count: fines.length,
+      hasDebt: pending > 0,
+    };
+  } catch (err) {
+    // Nunca debe tumbar el menú ni la pantalla de multas.
+    console.error("myFinesSummary", err);
+    return { pending: 0, total: 0, paid: 0, count: 0, hasDebt: false };
+  }
+}
+
+// ¿Puede el usuario cambiar el estado de pago? Rol entrenador o permiso económico.
+export async function canManageFinePayments() {
+  const s = await getSession();
+  if (!s) return false;
+  if (s.role === "COACH") return true;
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: s.userId },
+      select: { canManageFinePayments: true },
+    });
+    return !!u?.canManageFinePayments;
+  } catch (err) {
+    console.error("canManageFinePayments", err);
+    return false;
   }
 }

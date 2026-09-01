@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Pencil, Check, X, Loader2, Trophy } from "lucide-react";
+import { Minus, Plus, Pencil, Check, X, Loader2 } from "lucide-react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { setPlayerPoints, adjustPlayerPoints } from "@/actions/league";
 
@@ -57,15 +57,56 @@ export function LeagueList({
     );
   }
 
-  const medal = ["text-dorado", "text-gris", "text-[#b08d57]"];
+  // Podio: se calcula a partir de la POSICIÓN ya ordenada (nunca se guarda).
+  // Además del color se usan medalla, número de posición y etiqueta de texto.
+  const PODIUM = [
+    {
+      label: "Oro",
+      medal: "🥇",
+      card: "bg-[#C9A227]/12 ring-1 ring-[#C9A227]",
+      badge: "bg-[#C9A227] text-negro",
+    },
+    {
+      label: "Plata",
+      medal: "🥈",
+      card: "bg-[#A8A9AD]/15 ring-1 ring-[#8E9095]",
+      badge: "bg-[#8E9095] text-blanco",
+    },
+    {
+      label: "Bronce",
+      medal: "🥉",
+      card: "bg-[#B08D57]/12 ring-1 ring-[#B08D57]",
+      badge: "bg-[#B08D57] text-blanco",
+    },
+  ];
 
   return (
     <div className="space-y-2">
-      {sorted.map((p, i) => (
-        <div key={p.id} className="card flex items-center gap-3 p-3">
-          <div className="flex w-7 shrink-0 items-center justify-center">
-            {i < 3 ? (
-              <Trophy size={18} className={medal[i]} />
+      {sorted.map((p, i) => {
+        const podium = i < 3 ? PODIUM[i] : null;
+        return (
+        <div
+          key={p.id}
+          className={"card flex items-center gap-3 p-3 " + (podium ? podium.card : "")}
+        >
+          <div className="flex w-9 shrink-0 flex-col items-center justify-center">
+            {podium ? (
+              <>
+                <span aria-hidden className="text-lg leading-none">
+                  {podium.medal}
+                </span>
+                <span
+                  className={
+                    "mt-0.5 rounded px-1 text-[10px] font-bold leading-tight " +
+                    podium.badge
+                  }
+                >
+                  {i + 1}º
+                </span>
+                <span className="sr-only">
+                  Posición {i + 1}, {podium.label}
+                </span>
+              </>
             ) : (
               <span className="text-sm font-semibold text-gris">{i + 1}</span>
             )}
@@ -153,7 +194,8 @@ export function LeagueList({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

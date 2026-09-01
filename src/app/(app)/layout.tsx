@@ -2,6 +2,7 @@ import * as React from "react";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { myFinesSummary } from "@/lib/queries";
 import { AppShell } from "@/components/AppShell";
 import { AccountNotice } from "./AccountNotice";
 
@@ -29,5 +30,11 @@ export default async function AppLayout({
   }
 
   const roleLabel = session.role === "COACH" ? "Entrenador" : "Jugador";
-  return <AppShell roleLabel={roleLabel}>{children}</AppShell>;
+  // Aviso personal de multas: se calcula desde la deuda real del usuario.
+  const mine = await myFinesSummary();
+  return (
+    <AppShell roleLabel={roleLabel} fineDebt={mine.hasDebt}>
+      {children}
+    </AppShell>
+  );
 }

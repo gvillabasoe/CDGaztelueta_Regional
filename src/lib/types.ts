@@ -155,6 +155,7 @@ export type ExerciseRatingInput = { exerciseId: string; rating: number };
 // ── Multas (10) ───────────────────────────────────────────────────
 export type FineInput = {
   playerIds: string[];
+  staffUserIds?: string[]; // destinatarios del cuerpo técnico
   date: string;
   concept: string;
   amount: number;

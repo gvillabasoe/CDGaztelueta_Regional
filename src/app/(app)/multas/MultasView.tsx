@@ -49,7 +49,8 @@ type Fine = {
   status: Status;
 };
 type Group = {
-  playerId: string;
+  key: string;
+  kind: "player" | "staff";
   name: string;
   fines: Fine[];
   total: number;
@@ -73,26 +74,32 @@ function today() {
 
 export function MultasView({
   isCoach,
+  canPay,
   year,
   month0,
   groups,
   monthTotal,
   monthPaid,
   monthPending,
-  playersWithDebt,
+  peopleWithDebt,
   grandTotal,
   players,
+  staff,
+  myPending,
 }: {
   isCoach: boolean;
+  canPay: boolean;
   year: number;
   month0: number;
   groups: Group[];
   monthTotal: number;
   monthPaid: number;
   monthPending: number;
-  playersWithDebt: number;
+  peopleWithDebt: number;
   grandTotal: number;
   players: PlayerLite[];
+  staff: { id: string; name: string }[];
+  myPending: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -110,6 +117,7 @@ export function MultasView({
   // Alta de multa (entrenador)
   const [adding, setAdding] = React.useState(false);
   const [sel, setSel] = React.useState<string[]>([]);
+  const [selStaff, setSelStaff] = React.useState<string[]>([]);
   const [date, setDate] = React.useState(today());
   const [concept, setConcept] = React.useState("");
   const [amount, setAmount] = React.useState("");
@@ -118,24 +126,60 @@ export function MultasView({
   async function submitAdd() {
     setAddErr(null);
     setBusy("add");
-    const res = await createFines({
-      playerIds: sel,
-      date,
-      concept,
-      amount: parseFloat(amount.replace(",", ".")) || 0,
-    });
-    setBusy(null);
-    if (!res.ok) return setAddErr(res.error);
-    setAdding(false);
-    setSel([]);
-    setConcept("");
-    setAmount("");
-    router.refresh();
+    try {
+      const res = await createFines({
+        playerIds: sel,
+        staffUserIds: selStaff,
+        date,
+        concept,
+        amount: parseFloat(amount.replace(",", ".")) || 0,
+      });
+      if (!res.ok) {
+        setAddErr(res.error);
+        return;
+      }
+      setAdding(false);
+      setSel([]);
+      setSelStaff([]);
+      setConcept("");
+      setAmount("");
+      router.refresh();
+    } catch (err) {
+      console.error("crear multa", err);
+      setAddErr("No se ha podido guardar la multa. Inténtalo de nuevo.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
     <div className="space-y-4">
       <h1 className="font-display text-2xl font-semibold text-negro">Multas</h1>
+
+      {/* Resumen personal (misma lógica que el aviso del menú) */}
+      <div
+        className={
+          "card p-4 " +
+          (myPending > 0
+            ? "border border-red-200 bg-red-50"
+            : "border border-green-200 bg-green-50")
+        }
+      >
+        <p className="eyebrow mb-1">Mis multas</p>
+        <p className="font-display text-2xl font-bold text-negro">
+          Pendiente de pago: {formatEuro(myPending)}
+        </p>
+        {myPending > 0 ? (
+          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-red-700">
+            <span aria-hidden className="text-base leading-none">⚠</span>
+            Tienes multas pendientes de pago.
+          </p>
+        ) : (
+          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-green-700">
+            <Check size={15} /> No tienes multas pendientes.
+          </p>
+        )}
+      </div>
 
       {/* Selector de mes */}
       <div className="card flex items-center justify-between p-2">
@@ -188,11 +232,11 @@ export function MultasView({
         </div>
       </div>
       <p className="-mt-2 px-1 text-xs text-gris">
-        {playersWithDebt}{" "}
-        {playersWithDebt === 1
-          ? "jugador con pagos pendientes"
-          : "jugadores con pagos pendientes"}
-        .
+        {peopleWithDebt}{" "}
+        {peopleWithDebt === 1
+          ? "persona con pagos pendientes"
+          : "personas con pagos pendientes"}{" "}
+        (jugadores y cuerpo técnico).
       </p>
 
       {isCoach && !adding && (
@@ -229,6 +273,35 @@ export function MultasView({
               );
             })}
           </div>
+          {staff.length > 0 && (
+            <>
+              <label className="label">Cuerpo técnico</label>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {staff.map((t) => {
+                  const on = selStaff.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setSelStaff((s2) =>
+                          on ? s2.filter((i) => i !== t.id) : [...s2, t.id],
+                        )
+                      }
+                      className={
+                        "chip border " +
+                        (on
+                          ? "border-dorado bg-dorado text-negro"
+                          : "border-gris/30 bg-blanco text-negro")
+                      }
+                    >
+                      {t.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="label">Importe (€)</label>
@@ -278,95 +351,36 @@ export function MultasView({
         </div>
       )}
 
-      {/* Listado por jugador */}
+      {/* Listado: misma fuente de datos, dos bloques visuales */}
       {groups.length === 0 ? (
         <div className="card p-6 text-center text-sm text-gris">
           No hay multas en {MONTHS[month0]} {year}.
         </div>
       ) : (
-        <div className="space-y-3">
-          {groups.map((g) => {
-            const debt = g.pending > 0;
+        <div className="space-y-5">
+          {(
+            [
+              ["player", "Jugadores"],
+              ["staff", "Cuerpo técnico"],
+            ] as const
+          ).map(([kind, title]) => {
+            const list = groups.filter((g) => g.kind === kind);
+            if (list.length === 0) return null;
             return (
-              <div key={g.playerId} className="card overflow-hidden">
-                <div className="flex items-center justify-between gap-2 border-b border-gris/10 bg-beige/50 px-4 py-2.5">
-                  <span
-                    className={
-                      "flex items-center gap-1.5 font-semibold " +
-                      (debt ? "text-red-600" : "text-negro")
-                    }
-                  >
-                    {debt ? (
-                      <span aria-hidden className="text-base leading-none">⚠</span>
-                    ) : (
-                      <Check size={15} className="text-green-600" />
-                    )}
-                    {g.name}
-                  </span>
-                  <span
-                    className={
-                      "shrink-0 text-sm font-semibold " +
-                      (debt ? "text-red-600" : "text-green-700")
-                    }
-                  >
-                    {debt
-                      ? `${formatEuro(g.pending)} pendiente`
-                      : "Pagado"}
-                  </span>
-                </div>
-
-                <ul className="divide-y divide-gris/10">
-                  {g.fines.map((f) => (
-                    <FineRow
-                      key={f.id}
-                      fine={f}
+              <div key={kind}>
+                <h2 className="eyebrow mb-2 px-1">{title}</h2>
+                <div className="space-y-3">
+                  {list.map((g) => (
+                    <MemberCard
+                      key={g.key}
+                      group={g}
                       isCoach={isCoach}
-                      busy={busy === f.id}
-                      onPayAll={async () => {
-                        setBusy(f.id);
-                        await setFinePaid(f.id, true);
-                        setBusy(null);
-                        router.refresh();
-                      }}
-                      onSetPending={async () => {
-                        setBusy(f.id);
-                        await setFinePaid(f.id, false);
-                        setBusy(null);
-                        router.refresh();
-                      }}
-                      onPay={async (amt) => {
-                        setBusy(f.id);
-                        const r = await setFinePayment(f.id, amt);
-                        setBusy(null);
-                        if (r.ok) router.refresh();
-                        return r.ok ? null : r.error;
-                      }}
-                      onDelete={async () => {
-                        if (!confirm("¿Eliminar esta multa?")) return;
-                        setBusy(f.id);
-                        await deleteFine(f.id);
-                        setBusy(null);
-                        router.refresh();
-                      }}
-                      onSave={async (d) => {
-                        setBusy(f.id);
-                        const r = await updateFine(f.id, d);
-                        setBusy(null);
-                        if (r.ok) router.refresh();
-                        return r.ok ? null : r.error;
-                      }}
+                      canPay={canPay}
+                      busy={busy}
+                      setBusy={setBusy}
+                      refresh={() => router.refresh()}
                     />
                   ))}
-                </ul>
-
-                <div className="flex justify-end gap-3 border-t border-gris/10 px-4 py-2 text-xs">
-                  <span className="text-gris">Total {formatEuro(g.total)}</span>
-                  <span className="text-green-700">
-                    Pagado {formatEuro(g.paid)}
-                  </span>
-                  <span className="text-red-600">
-                    Pendiente {formatEuro(g.pending)}
-                  </span>
                 </div>
               </div>
             );
@@ -390,6 +404,7 @@ export function MultasView({
 function FineRow({
   fine,
   isCoach,
+  canPay,
   busy,
   onPayAll,
   onSetPending,
@@ -399,6 +414,7 @@ function FineRow({
 }: {
   fine: Fine;
   isCoach: boolean;
+  canPay: boolean; // rol entrenador o permiso económico
   busy: boolean;
   onPayAll: () => void;
   onSetPending: () => void;
@@ -509,6 +525,27 @@ function FineRow({
         >
           {meta.label}
         </span>
+        {/* Permiso económico: solo alternar pendiente/pagada. */}
+        {!isCoach && canPay && (
+          <button
+            onClick={fine.pending > 0 ? onPayAll : onSetPending}
+            disabled={busy}
+            className={
+              "shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50 " +
+              (fine.pending > 0
+                ? "bg-green-600 text-white"
+                : "border border-gris/30 text-negro")
+            }
+          >
+            {busy ? (
+              <Loader2 size={12} className="inline animate-spin" />
+            ) : fine.pending > 0 ? (
+              "Marcar pagada"
+            ) : (
+              "Volver a pendiente"
+            )}
+          </button>
+        )}
         {isCoach && (
           <>
             <button
@@ -578,5 +615,125 @@ function FineRow({
         </div>
       )}
     </li>
+  );
+}
+
+function MemberCard({
+  group: g,
+  isCoach,
+  canPay,
+  busy,
+  setBusy,
+  refresh,
+}: {
+  group: Group;
+  isCoach: boolean;
+  canPay: boolean;
+  busy: string | null;
+  setBusy: (v: string | null) => void;
+  refresh: () => void;
+}) {
+  const debt = g.pending > 0;
+
+  // Envoltura común: la carga termina siempre, también si falla la operación.
+  async function run(id: string, fn: () => Promise<unknown>) {
+    setBusy(id);
+    try {
+      await fn();
+      refresh();
+    } catch (err) {
+      console.error("operación de multa", err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-gris/10 bg-beige/50 px-4 py-2.5">
+        <span
+          className={
+            "flex min-w-0 items-center gap-1.5 font-semibold " +
+            (debt ? "text-red-600" : "text-negro")
+          }
+        >
+          {debt ? (
+            <span aria-hidden className="shrink-0 text-base leading-none">
+              ⚠
+            </span>
+          ) : (
+            <Check size={15} className="shrink-0 text-green-600" />
+          )}
+          <span className="truncate">{g.name}</span>
+          {g.kind === "staff" && (
+            <span className="chip shrink-0 bg-marino/10 text-[10px] text-marino">
+              Entrenador
+            </span>
+          )}
+        </span>
+        <span
+          className={
+            "shrink-0 text-sm font-semibold " +
+            (debt ? "text-red-600" : "text-green-700")
+          }
+        >
+          {debt ? `${formatEuro(g.pending)} pendiente` : "Pagado"}
+        </span>
+      </div>
+
+      <ul className="divide-y divide-gris/10">
+        {g.fines.map((f) => (
+          <FineRow
+            key={f.id}
+            fine={f}
+            isCoach={isCoach}
+            canPay={canPay}
+            busy={busy === f.id}
+            onPayAll={() => run(f.id, () => setFinePaid(f.id, true))}
+            onSetPending={() => run(f.id, () => setFinePaid(f.id, false))}
+            onPay={async (amt) => {
+              setBusy(f.id);
+              try {
+                const r = await setFinePayment(f.id, amt);
+                if (r.ok) refresh();
+                return r.ok ? null : r.error;
+              } catch (err) {
+                console.error("registrar pago", err);
+                return "No se ha podido registrar el pago.";
+              } finally {
+                setBusy(null);
+              }
+            }}
+            onDelete={async () => {
+              if (!confirm("¿Eliminar esta multa?")) return;
+              await run(f.id, () => deleteFine(f.id));
+            }}
+            onSave={async (d) => {
+              setBusy(f.id);
+              try {
+                const r = await updateFine(f.id, d);
+                if (r.ok) refresh();
+                return r.ok ? null : r.error;
+              } catch (err) {
+                console.error("guardar multa", err);
+                return "No se ha podido guardar la multa.";
+              } finally {
+                setBusy(null);
+              }
+            }}
+          />
+        ))}
+      </ul>
+
+      <div className="flex flex-wrap justify-end gap-3 border-t border-gris/10 px-4 py-2 text-xs">
+        <span className="text-gris">
+          {g.fines.length}{" "}
+          {g.fines.length === 1 ? "multa" : "multas"}
+        </span>
+        <span className="text-gris">Total {formatEuro(g.total)}</span>
+        <span className="text-green-700">Pagado {formatEuro(g.paid)}</span>
+        <span className="text-red-600">Pendiente {formatEuro(g.pending)}</span>
+      </div>
+    </div>
   );
 }
