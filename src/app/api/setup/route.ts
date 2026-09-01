@@ -3,84 +3,92 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { normalizeEmail } from "@/lib/email";
 
-// Inicialización idempotente: crea o ACTUALIZA los entrenadores del cuerpo
-// técnico (fijando su contraseña) y la ficha del club, y asigna el permiso
-// económico a la cuenta indicada si existe. Visítala en el navegador tras desplegar.
+// Inicialización idempotente del cuerpo técnico y de la ficha del club.
+// CADA PASO ES INDEPENDIENTE: si uno falla, los demás se ejecutan igualmente y
+// el resultado se informa paso a paso. Así un fallo suelto nunca impide crear
+// las cuentas de acceso.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Correo de la cuenta que debe recibir el permiso económico (no se inventa contraseña).
 const FINANCE_EMAIL = "iurzaye@gmail.com";
 
+const COACHES = [
+  { username: "igomeza30", password: "mister", displayName: null as string | null },
+  { username: "diegozumarraga", password: "2mister", displayName: null as string | null },
+  { username: "cmattheus", password: "3mister", displayName: "Carlos Mattheus" },
+];
+
 export async function GET() {
+  const pasos: Record<string, string> = {};
+
+  // 1) Ficha del club (aislada: no debe bloquear la creación de cuentas)
   try {
-    // Ficha del club (fila única id=1)
     await prisma.teamProfile.upsert({
       where: { id: 1 },
       update: {},
       create: { id: 1, name: "CD Gaztelueta" },
     });
+    pasos.fichaClub = "OK";
+  } catch (e) {
+    pasos.fichaClub = `FALLO (no impide crear cuentas): ${String(e)}`;
+  }
 
-    // Cuerpo técnico. Los tres tienen el MISMO rol (COACH) y, por tanto, los
-    // mismos permisos administrativos: no hay entrenador "secundario".
-    const coaches = [
-      { username: "igomeza30", password: "mister", displayName: null as string | null },
-      { username: "diegozumarraga", password: "2mister", displayName: null as string | null },
-      { username: "cmattheus", password: "3mister", displayName: "Carlos Mattheus" },
-    ];
-
-    // Se crea la cuenta en DOS pasos aislados: primero lo imprescindible para
-    // poder iniciar sesión (usuario, contraseña, rol) y después los campos
-    // añadidos en versiones posteriores. Así, si alguna columna nueva todavía no
-    // existe en la base de datos, la cuenta se crea igualmente y se informa.
-    const avisos: string[] = [];
-
-    for (const c of coaches) {
+  // 2) Cuentas del cuerpo técnico: lo imprescindible para poder entrar
+  for (const c of COACHES) {
+    const clave = `cuenta_${c.username}`;
+    try {
       const hash = await bcrypt.hash(c.password, 10);
-      try {
-        const existing = await prisma.user.findUnique({
-          where: { username: c.username },
-          select: { id: true },
+      const existing = await prisma.user.findFirst({
+        where: { username: { equals: c.username, mode: "insensitive" } },
+        select: { id: true, username: true },
+      });
+      if (existing) {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { password: hash, role: "COACH" },
         });
-        if (existing) {
-          // Nunca se crea una segunda cuenta: se actualiza la existente.
-          await prisma.user.update({
-            where: { username: c.username },
-            data: { password: hash, role: "COACH" },
-          });
-        } else {
-          await prisma.user.create({
-            data: { username: c.username, password: hash, role: "COACH" },
-          });
-        }
-      } catch (e) {
-        avisos.push(`No se pudo crear/actualizar ${c.username}: ${String(e)}`);
+        pasos[clave] = `OK (ya existía como "${existing.username}", contraseña restablecida)`;
+      } else {
+        await prisma.user.create({
+          data: { username: c.username, password: hash, role: "COACH" },
+        });
+        pasos[clave] = "OK (creada)";
+      }
+    } catch (e) {
+      pasos[clave] = `FALLO: ${String(e)}`;
+    }
+  }
+
+  // 3) Extras del rol (voto y nombre visible): no afectan al acceso
+  for (const c of COACHES) {
+    const clave = `extras_${c.username}`;
+    try {
+      const u = await prisma.user.findFirst({
+        where: { username: { equals: c.username, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (!u) {
+        pasos[clave] = "OMITIDO (la cuenta no existe)";
         continue;
       }
-
-      // Extras (permiso de voto y nombre visible): no bloquean el acceso.
-      try {
-        await prisma.user.update({
-          where: { username: c.username },
-          data: {
-            canVote: true,
-            ...(c.displayName ? { displayName: c.displayName } : {}),
-          },
-        });
-      } catch (e) {
-        avisos.push(
-          `${c.username}: cuenta lista, pero faltan columnas nuevas (canVote/displayName). Ejecuta "prisma db push". Detalle: ${String(e)}`,
-        );
-      }
+      await prisma.user.update({
+        where: { id: u.id },
+        data: {
+          canVote: true,
+          ...(c.displayName ? { displayName: c.displayName } : {}),
+        },
+      });
+      pasos[clave] = "OK";
+    } catch (e) {
+      pasos[clave] =
+        `FALLO: faltan columnas nuevas en la base de datos (canVote/displayName). ` +
+        `La cuenta SÍ puede iniciar sesión. Ejecuta "prisma db push". Detalle: ${String(e)}`;
     }
+  }
 
-    // ── Permiso económico (independiente del rol) ──
-    // Se busca la cuenta por correo NORMALIZADO (sin espacios, sin distinguir
-    // mayúsculas): en User.email, en el nombre de usuario (el autorregistro usa
-    // el correo como usuario) o en el correo de la ficha vinculada.
+  // 4) Permiso económico por correo normalizado
+  try {
     const target = normalizeEmail(FINANCE_EMAIL);
-    let permisoEconomico = "";
-    try {
     const candidates = await prisma.user.findMany({
       select: {
         id: true,
@@ -95,55 +103,45 @@ export async function GET() {
         normalizeEmail(u.username) === target ||
         normalizeEmail(u.player?.email) === target,
     );
-
     if (match) {
       await prisma.user.update({
         where: { id: match.id },
         data: { canManageFinePayments: true, email: target },
       });
-      permisoEconomico = `Permiso de gestión de pagos asignado a la cuenta "${match.username}".`;
+      pasos.permisoEconomico = `OK: asignado a la cuenta "${match.username}".`;
     } else {
-      permisoEconomico =
+      pasos.permisoEconomico =
         `NO se ha encontrado ninguna cuenta con el correo ${FINANCE_EMAIL}. ` +
-        "El permiso está implementado y listo: cuando esa persona cree su cuenta " +
-        "con ese correo, vuelve a visitar /api/setup y se le asignará. " +
-        "No se ha concedido el permiso a ningún otro usuario.";
+        "Cuando esa persona cree su cuenta con ese correo, vuelve a visitar /api/setup. " +
+        "No se ha concedido el permiso a nadie más.";
     }
-    } catch (e) {
-      permisoEconomico =
-        "No se pudo comprobar el permiso económico (faltan columnas nuevas). " +
-        'Ejecuta "prisma db push" y vuelve a visitar /api/setup. Detalle: ' +
-        String(e);
-    }
-
-    let usuarios: { username: string; role: string }[] = [];
-    try {
-      usuarios = await prisma.user.findMany({
-        select: { username: true, role: true },
-        orderBy: { username: "asc" },
-      });
-    } catch (e) {
-      avisos.push(`No se pudo listar usuarios: ${String(e)}`);
-    }
-
-    return NextResponse.json({
-      ok: true,
-      message:
-        "Cuerpo técnico creado/actualizado: igomeza30, diegozumarraga y cmattheus (rol Entrenador, mismos permisos).",
-      permisoEconomico,
-      avisos,
-      totalUsuarios: usuarios.length,
-      usuarios,
-    });
   } catch (e) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message:
-          "Error al inicializar. Revisa DATABASE_URL (mismo entorno que la app) y que las tablas existan.",
-        error: String(e),
-      },
-      { status: 500 },
-    );
+    pasos.permisoEconomico = `FALLO (faltan columnas nuevas): ${String(e)}`;
   }
+
+  // 5) Listado final de usuarios
+  let usuarios: { username: string; role: string }[] = [];
+  try {
+    usuarios = await prisma.user.findMany({
+      select: { username: true, role: true },
+      orderBy: { username: "asc" },
+    });
+    pasos.listadoUsuarios = "OK";
+  } catch (e) {
+    pasos.listadoUsuarios = `FALLO: ${String(e)}`;
+  }
+
+  const cuentasOk = COACHES.every((c) =>
+    (pasos[`cuenta_${c.username}`] ?? "").startsWith("OK"),
+  );
+
+  return NextResponse.json({
+    ok: cuentasOk,
+    message: cuentasOk
+      ? "Cuentas del cuerpo técnico listas: igomeza30, diegozumarraga y cmattheus (rol Entrenador)."
+      : "Alguna cuenta NO se ha podido crear. Mira el detalle en 'pasos'.",
+    pasos,
+    totalUsuarios: usuarios.length,
+    usuarios,
+  });
 }
