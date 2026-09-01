@@ -74,6 +74,11 @@ model User {
   createdAt     DateTime @default(now())
   hideStandings Boolean  @default(false) // preferencia personal: ocultar clasificación oficial en HOME
   canVote       Boolean  @default(false) // permiso para votar en "Jugador del Mes" (cuerpo técnico)
+  displayName   String? // nombre visible (p. ej. "Carlos Mattheus")
+  email         String? // correo normalizado de la cuenta (opcional)
+  // Permiso económico independiente del rol: solo cambiar pendiente/pagada.
+  canManageFinePayments Boolean @default(false)
+  staffFines    Fine[]   @relation("StaffFines")
 }
 
 // ── Ficha del jugador (7) ─────────────────────────────────────────
@@ -338,16 +343,20 @@ model MatchCard {
 }
 
 // ── Multas (10). Una multa por jugador; fuente central. ───────────
+// Una multa tiene un ÚNICO destinatario: un jugador (playerId) o un miembro del
+// cuerpo técnico (staffUserId). Misma tabla, mismos estados y mismos cálculos.
 model Fine {
-  id        String   @id @default(cuid())
-  playerId  String
-  date      DateTime // fecha de la infracción
-  concept   String // concepto o motivo
-  amount     Float // importe
-  paid       Boolean  @default(false) // pagado por completo (derivado de amountPaid)
-  amountPaid Float    @default(0) // cantidad abonada (permite pagos parciales)
-  createdAt DateTime @default(now())
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  playerId    String? // destinatario jugador
+  staffUserId String? // destinatario del cuerpo técnico (cuenta con rol COACH)
+  date        DateTime // fecha de la infracción
+  concept     String // concepto o motivo
+  amount      Float // importe
+  paid        Boolean  @default(false) // pagado por completo (derivado de amountPaid)
+  amountPaid  Float    @default(0) // cantidad abonada (permite pagos parciales)
+  createdAt   DateTime @default(now())
+  player      Player?  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  staffUser   User?    @relation("StaffFines", fields: [staffUserId], references: [id], onDelete: Cascade)
 }
 
 // ── Propuestas (9) ────────────────────────────────────────────────
