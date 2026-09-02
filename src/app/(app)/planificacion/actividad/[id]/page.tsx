@@ -14,9 +14,9 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getActivity, currentPlayer } from "@/lib/queries";
+import { pendingPdfActivityIds, getActivity, currentPlayer } from "@/lib/queries";
 import { isTrainingAttendanceClosed } from "@/lib/deadlines";
-import { formatDateLong } from "@/lib/format";
+import { formatDateLong, formatDateTimeShort } from "@/lib/format";
 import { AttendancePanel } from "./AttendancePanel";
 import { ExercisesEditor } from "./ExercisesEditor";
 import { ExerciseList } from "./ExerciseList";
@@ -46,6 +46,9 @@ export default async function ActivityPage({
     orderBy: [{ number: "asc" }, { firstName: "asc" }],
     select: { id: true, firstName: true, lastName: true, photo: true },
   });
+
+  // ¿Tiene ESTE usuario el PDF de esta sesión sin consultar?
+  const pdfPendingHere = (await pendingPdfActivityIds()).has(activity.id);
 
   const rosterLite = roster.map((p) => ({
     id: p.id,
@@ -84,6 +87,9 @@ export default async function ActivityPage({
       reason: (r?.reason ?? null) as string | null,
       explanation: r?.explanation ?? null,
       outOfTime: r?.outOfTime ?? false,
+      // Auditoría existente (solo se muestra al entrenador).
+      modifiedByName: r?.modifiedByName ?? null,
+      modifiedAtLabel: r?.modifiedAt ? formatDateTimeShort(r.modifiedAt) : null,
     };
   });
 
@@ -197,6 +203,7 @@ export default async function ActivityPage({
               activityId={activity.id}
               isCoach={isCoach}
               fileName={activity.fileName}
+              pdfPending={pdfPendingHere}
             />
           </section>
 

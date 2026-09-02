@@ -57,26 +57,30 @@ export function LeagueList({
     );
   }
 
-  // Podio: se calcula a partir de la POSICIÓN ya ordenada (nunca se guarda).
-  // Además del color se usan medalla, número de posición y etiqueta de texto.
+  // Podio: se calcula a partir de la POSICIÓN ya ordenada (nunca se guarda en
+  // la ficha del jugador). El relleno afecta a la FILA COMPLETA y se acompaña
+  // de medalla, número de posición y etiqueta de texto.
   const PODIUM = [
     {
       label: "Oro",
       medal: "🥇",
-      card: "bg-[#C9A227]/12 ring-1 ring-[#C9A227]",
-      badge: "bg-[#C9A227] text-negro",
+      row: "bg-[#F7E7A6] border border-[#C9A227] shadow-card",
+      badge: "bg-[#C9A227] text-[#1A1A1A]",
+      text: "text-[#4A3B08]",
     },
     {
       label: "Plata",
       medal: "🥈",
-      card: "bg-[#A8A9AD]/15 ring-1 ring-[#8E9095]",
-      badge: "bg-[#8E9095] text-blanco",
+      row: "bg-[#E4E6EA] border border-[#9AA0A6] shadow-card",
+      badge: "bg-[#7E848B] text-blanco",
+      text: "text-[#2F3337]",
     },
     {
       label: "Bronce",
       medal: "🥉",
-      card: "bg-[#B08D57]/12 ring-1 ring-[#B08D57]",
-      badge: "bg-[#B08D57] text-blanco",
+      row: "bg-[#EFD9BE] border border-[#B08D57] shadow-card",
+      badge: "bg-[#9C7742] text-blanco",
+      text: "text-[#4A3520]",
     },
   ];
 
@@ -87,7 +91,10 @@ export function LeagueList({
         return (
         <div
           key={p.id}
-          className={"card flex items-center gap-3 p-3 " + (podium ? podium.card : "")}
+          className={
+            "flex items-center gap-3 rounded-2xl p-3 " +
+            (podium ? podium.row : "card")
+          }
         >
           <div className="flex w-9 shrink-0 flex-col items-center justify-center">
             {podium ? (
@@ -118,9 +125,18 @@ export function LeagueList({
             size={40}
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-negro">
+            <p
+              className={
+                "truncate font-semibold " + (podium ? podium.text : "text-negro")
+              }
+            >
               {p.firstName} {p.lastName}
             </p>
+            {podium && (
+              <p className={"text-[11px] font-bold uppercase " + podium.text}>
+                {podium.label}
+              </p>
+            )}
           </div>
 
           {isCoach && editId === p.id ? (
@@ -159,13 +175,23 @@ export function LeagueList({
                   <Minus size={15} />
                 </button>
               )}
-              <span className="min-w-[3rem] text-right font-display text-xl font-bold text-marino">
+              <span
+                className={
+                  "min-w-[3rem] text-right font-display text-xl font-bold " +
+                  (podium ? podium.text : "text-marino")
+                }
+              >
                 {busy === p.id ? (
                   <Loader2 size={16} className="inline animate-spin" />
                 ) : (
                   p.leaguePoints
                 )}
-                <span className="ml-1 text-[11px] font-semibold text-gris">
+                <span
+                  className={
+                    "ml-1 text-[11px] font-semibold " +
+                    (podium ? podium.text : "text-gris")
+                  }
+                >
                   pts
                 </span>
               </span>

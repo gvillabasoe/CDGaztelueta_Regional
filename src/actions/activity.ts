@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { registerActivityFileView } from "@/lib/pdfviews";
 import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import type { ExerciseInput } from "@/lib/types";
@@ -91,26 +92,63 @@ export async function uploadActivityFile(
   file: { name: string; mime: string; dataBase64: string },
 ) {
   if (!(await coach())) return { ok: false as const, error: "No autorizado." };
-  await prisma.activity.update({
-    where: { id: activityId },
-    data: {
-      fileName: file.name,
-      fileMime: file.mime,
-      fileData: Buffer.from(file.dataBase64, "base64"),
-    },
-  });
-  revalidatePath(`/planificacion/actividad/${activityId}`);
-  return { ok: true as const };
+
+  // Solo PDF: si no lo es, no se toca el documento vigente.
+  const isPdf =
+    file.mime === "application/pdf" || /\.pdf$/i.test(file.name.trim());
+  if (!isPdf)
+    return {
+      ok: false as const,
+      error: "El archivo debe estar en formato PDF. No se ha cambiado el documento.",
+    };
+
+  try {
+    const data = Buffer.from(file.dataBase64, "base64");
+    if (!data.length)
+      return { ok: false as const, error: "El archivo está vacío. Inténtalo de nuevo." };
+
+    // La versión sube +1 en la misma operación de guardado: si esto falla, el
+    // documento anterior y sus lecturas se conservan intactos y no se genera
+    // ningún aviso falso.
+    await prisma.activity.update({
+      where: { id: activityId },
+      data: {
+        fileData: data,
+        fileName: file.name.trim() || "documento.pdf",
+        fileMime: "application/pdf",
+        fileVersion: { increment: 1 },
+      },
+    });
+
+    revalidatePath(`/planificacion/actividad/${activityId}`);
+    revalidatePath("/planificacion");
+    return { ok: true as const };
+  } catch (err) {
+    console.error("uploadActivityFile", activityId, err);
+    return {
+      ok: false as const,
+      error: "No se ha podido subir el documento. Inténtalo de nuevo.",
+    };
+  }
 }
 
 export async function deleteActivityFile(activityId: string) {
   if (!(await coach())) return { ok: false as const, error: "No autorizado." };
-  await prisma.activity.update({
-    where: { id: activityId },
-    data: { fileName: null, fileMime: null, fileData: null },
-  });
-  revalidatePath(`/planificacion/actividad/${activityId}`);
-  return { ok: true as const };
+  try {
+    await prisma.activity.update({
+      where: { id: activityId },
+      data: { fileData: null, fileName: null, fileMime: null },
+    });
+    revalidatePath(`/planificacion/actividad/${activityId}`);
+    revalidatePath("/planificacion");
+    return { ok: true as const };
+  } catch (err) {
+    console.error("deleteActivityFile", activityId, err);
+    return {
+      ok: false as const,
+      error: "No se ha podido eliminar el documento. Inténtalo de nuevo.",
+    };
+  }
 }
 
 // Documento o imagen específico de un ejercicio (23). Solo el entrenador.
@@ -140,5 +178,18 @@ export async function deleteExerciseFile(exerciseId: string) {
     select: { activityId: true },
   });
   revalidatePath(`/planificacion/actividad/${ex.activityId}`);
+  return { ok: true as const };
+}
+
+// Marca el PDF general como consultado por el USUARIO AUTENTICADO.
+// El identificador nunca se acepta del cliente: se toma de la sesión.
+export async function markActivityFileViewed(activityId: string) {
+  const s = await getSession();
+  if (!s) return { ok: false as const, error: "No autorizado." };
+  const done = await registerActivityFileView(s.userId, activityId);
+  if (!done)
+    return { ok: false as const, error: "El documento no está disponible." };
+  revalidatePath("/planificacion");
+  revalidatePath(`/planificacion/actividad/${activityId}`);
   return { ok: true as const };
 }

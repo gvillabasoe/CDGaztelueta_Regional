@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { getSession } from "@/lib/session";
-import { weeklyPlans, playerCount } from "@/lib/queries";
+import {
+  weeklyPlans,
+  playerCount,
+  pendingPdfActivityIds,
+} from "@/lib/queries";
 import { formatDateShort } from "@/lib/format";
 import { PlanList } from "./PlanList";
 
@@ -18,6 +22,8 @@ export default async function PlanificacionPage() {
   const isCoach = session?.role === "COACH";
   const total = await playerCount();
   const plans = await weeklyPlans(!isCoach);
+  // Sesiones con PDF nuevo sin consultar por ESTE usuario.
+  const pendingPdf = await pendingPdfActivityIds();
 
   const lite = plans.map((p) => {
     const end = new Date(p.weekStart);
@@ -47,6 +53,7 @@ export default async function PlanificacionPage() {
           goingCount: total - notGoing,
           notGoingCount: notGoing,
           hasRecord: !!(a.trainingRecord || a.matchRecord),
+          pdfPending: pendingPdf.has(a.id),
         };
       }),
     };

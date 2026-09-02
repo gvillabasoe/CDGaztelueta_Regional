@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Download, Upload, Trash2, Loader2, Eye } from "lucide-react";
 import { uploadActivityFile, deleteActivityFile } from "@/actions/activity";
+import { markActivityFileViewed } from "@/actions/activity";
 
 async function fileToBase64(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((res, rej) => {
@@ -18,15 +19,19 @@ async function fileToBase64(file: File): Promise<string> {
 export function PdfManager({
   activityId,
   isCoach,
+  pdfPending = false,
   fileName,
 }: {
   activityId: string;
   isCoach: boolean;
+  pdfPending?: boolean;
   fileName: string | null;
 }) {
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
+  const [opening, setOpening] = React.useState(false);
+  const [openErr, setOpenErr] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -61,6 +66,30 @@ export function PdfManager({
 
   const href = `/api/activity-file/${activityId}`;
 
+  // Abre el PDF y lo marca como consultado SOLO si la apertura se completa.
+  // Un fallo o un archivo inexistente no marca nada como visto.
+  async function openPdf() {
+    setOpening(true);
+    setOpenErr(null);
+    try {
+      const res = await fetch(href, { method: "GET" });
+      if (!res.ok) {
+        setOpenErr("No se ha podido abrir el documento. Inténtalo de nuevo.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      await markActivityFileViewed(activityId);
+      router.refresh();
+    } catch (err) {
+      console.error("abrir PDF", err);
+      setOpenErr("No se ha podido abrir el documento. Inténtalo de nuevo.");
+    } finally {
+      setOpening(false);
+    }
+  }
+
   return (
     <div>
       {fileName ? (
@@ -68,15 +97,28 @@ export function PdfManager({
           <FileText size={20} className="text-marino" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {fileName}
+            {pdfPending && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 align-middle text-[10px] font-bold text-red-700">
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 rounded-full bg-red-600"
+                />
+                NUEVO
+              </span>
+            )}
           </span>
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg bg-marino px-2.5 py-1.5 text-xs font-semibold text-blanco"
+          <button
+            onClick={openPdf}
+            disabled={opening}
+            className="inline-flex items-center gap-1 rounded-lg bg-marino px-2.5 py-1.5 text-xs font-semibold text-blanco disabled:opacity-50"
           >
-            <Eye size={13} /> Ver
-          </a>
+            {opening ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Eye size={13} />
+            )}
+            VER PDF
+          </button>
           <a
             href={`${href}?download=1`}
             className="inline-flex items-center gap-1 rounded-lg border border-gris/30 bg-blanco px-2.5 py-1.5 text-xs font-semibold text-marino"
@@ -134,6 +176,11 @@ export function PdfManager({
         onChange={onFile}
         className="hidden"
       />
+      {openErr && (
+        <p className="mt-2 rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700">
+          {openErr}
+        </p>
+      )}
     </div>
   );
 }

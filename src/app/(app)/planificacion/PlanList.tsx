@@ -34,6 +34,7 @@ export type ActivityLite = {
   goingCount: number;
   notGoingCount: number;
   hasRecord: boolean;
+  pdfPending?: boolean; // PDF nuevo sin consultar por ESTE usuario
 };
 
 export type PlanLite = {
@@ -138,12 +139,20 @@ export function PlanList({
                 >
                   <span
                     className={
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full " +
+                      "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full " +
                       (a.type === "MATCH"
                         ? "bg-dorado/20 text-dorado"
                         : "bg-marino/10 text-marino")
                     }
                   >
+                    {a.pdfPending && (
+                      <span
+                        role="status"
+                        aria-label="Documento nuevo sin consultar"
+                        title="Documento nuevo sin consultar"
+                        className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-blanco"
+                      />
+                    )}
                     {a.type === "MATCH" ? (
                       <Trophy size={17} />
                     ) : (

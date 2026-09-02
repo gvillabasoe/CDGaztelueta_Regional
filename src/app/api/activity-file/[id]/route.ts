@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { registerActivityFileView } from "@/lib/pdfviews";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,12 @@ export async function GET(
   });
   if (!activity || !activity.fileData) {
     return new NextResponse("Archivo no encontrado", { status: 404 });
+  }
+
+  // La consulta se registra SOLO cuando el archivo existe y se va a entregar,
+  // y siempre para el usuario autenticado (nunca un id recibido del cliente).
+  if (session.role === "PLAYER") {
+    await registerActivityFileView(session.userId, params.id);
   }
 
   const bytes = Buffer.from(activity.fileData);

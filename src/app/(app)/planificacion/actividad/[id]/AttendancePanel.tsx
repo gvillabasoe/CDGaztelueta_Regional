@@ -17,6 +17,8 @@ type AP = {
   reason: string | null;
   explanation: string | null;
   outOfTime: boolean;
+  modifiedByName?: string | null;
+  modifiedAtLabel?: string | null;
 };
 
 const NOTICE =
@@ -44,8 +46,38 @@ export function AttendancePanel({
   closed: boolean;
 }) {
   const router = useRouter();
-  const going = players.filter((p) => p.status === "GOING").length;
-  const notGoing = players.length - going;
+
+  // Solo PRESENTACIÓN: se agrupa sin alterar ningún estado y conservando el
+  // orden interno que ya trae la plantilla dentro de cada grupo.
+  const goingList = players.filter((p) => p.status === "GOING");
+  const notGoingList = players.filter((p) => p.status === "NOT_GOING");
+
+  function renderRow(p: AP) {
+    return (
+      <Row
+            key={p.id}
+            p={p}
+            isCoach={isCoach}
+            editable={
+              isCoach || (p.id === myPlayerId && !(isTraining && closed))
+            }
+            onSave={async (status, reason, explanation) => {
+              const res = isCoach
+                ? await setPlayerAttendance(
+                    activityId,
+                    p.id,
+                    status,
+                    reason,
+                    explanation,
+                  )
+                : await setMyAttendance(activityId, status, reason, explanation);
+              if (!res.ok) return res.error;
+              router.refresh();
+              return null;
+            }}
+          />
+    );
+  }
 
   function openWhatsApp() {
     const url = "https://wa.me/?text=" + encodeURIComponent(WHATSAPP_MSG);
@@ -86,44 +118,63 @@ export function AttendancePanel({
         </div>
       )}
 
-      <div className="mb-3 flex gap-2">
-        <span className="chip bg-green-100 text-green-700">
-          {going} asistirán
-        </span>
-        <span className="chip bg-red-100 text-red-700">
-          {notGoing} no asistirán
-        </span>
+      {/* Resumen superior: se calcula desde los MISMOS registros de asistencia */}
+      <div className="mb-3 rounded-xl border border-gris/15 bg-beige/40 p-3">
+        <p className="eyebrow mb-2">Asistencia</p>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-2.5 py-1 font-semibold text-green-700">
+            <Check size={14} /> {goingList.length} asistirán
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-2.5 py-1 font-semibold text-red-700">
+            <X size={14} /> {notGoingList.length} no asistirán
+          </span>
+          {isCoach && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-gris/30 px-2.5 py-1 font-semibold text-negro">
+              {players.length} {isTraining ? "incluidos" : "convocados"}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {players.map((p) => (
-          <Row
-            key={p.id}
-            p={p}
-            isCoach={isCoach}
-            editable={
-              isCoach || (p.id === myPlayerId && !(isTraining && closed))
-            }
-            onSave={async (status, reason, explanation) => {
-              const res = isCoach
-                ? await setPlayerAttendance(
-                    activityId,
-                    p.id,
-                    status,
-                    reason,
-                    explanation,
-                  )
-                : await setMyAttendance(activityId, status, reason, explanation);
-              if (!res.ok) return res.error;
-              router.refresh();
-              return null;
-            }}
-          />
-        ))}
-        {players.length === 0 && (
-          <p className="text-sm text-gris">Sin jugadores en la plantilla.</p>
-        )}
+      {/* Bloque 1: ASISTIRÁN */}
+      <div className="mb-4">
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-green-600 bg-green-50 px-3 py-2">
+          <Check size={16} className="text-green-700" />
+          <span className="text-sm font-bold text-green-800">
+            ASISTIRÁN — {goingList.length}{" "}
+            {goingList.length === 1 ? "jugador" : "jugadores"}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {goingList.map((p) => renderRow(p))}
+          {goingList.length === 0 && (
+            <p className="px-1 text-sm text-gris">
+              Todavía no hay confirmaciones.
+            </p>
+          )}
+        </div>
       </div>
+
+      {/* Bloque 2: NO ASISTIRÁN */}
+      <div>
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-red-600 bg-red-50 px-3 py-2">
+          <X size={16} className="text-red-700" />
+          <span className="text-sm font-bold text-red-800">
+            NO ASISTIRÁN — {notGoingList.length}{" "}
+            {notGoingList.length === 1 ? "jugador" : "jugadores"}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {notGoingList.map((p) => renderRow(p))}
+          {notGoingList.length === 0 && (
+            <p className="px-1 text-sm text-gris">Ninguna ausencia.</p>
+          )}
+        </div>
+      </div>
+
+      {players.length === 0 && (
+        <p className="mt-3 text-sm text-gris">Sin jugadores en la plantilla.</p>
+      )}
     </div>
   );
 }
@@ -186,11 +237,27 @@ function Row({
               </span>
             )}
           </p>
-          {p.status === "NOT_GOING" && p.reason && mode === "idle" && (
-            <p className="truncate text-xs text-gris">
-              {ABSENCE_LABEL[p.reason] ?? p.reason}
-              {p.explanation ? ` · ${p.explanation}` : ""}
-            </p>
+          {p.status === "NOT_GOING" && mode === "idle" && (
+            <div className="text-xs text-gris">
+              <p className="font-medium text-negro">
+                {p.reason
+                  ? (ABSENCE_LABEL[p.reason] ?? p.reason)
+                  : "Motivo no disponible"}
+              </p>
+              {p.explanation && (
+                <p className="whitespace-pre-line break-words">
+                  {p.explanation}
+                </p>
+              )}
+              {/* Auditoría: solo para el entrenador y como texto secundario. */}
+              {isCoach && (p.modifiedByName || p.modifiedAtLabel) && (
+                <p className="mt-0.5 text-[11px] text-gris">
+                  {p.outOfTime ? "Modificado fuera de plazo" : "Modificado"}
+                  {p.modifiedByName ? ` por ${p.modifiedByName}` : ""}
+                  {p.modifiedAtLabel ? ` · ${p.modifiedAtLabel}` : ""}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
