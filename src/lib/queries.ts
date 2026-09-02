@@ -552,3 +552,46 @@ export async function canManageFinePayments() {
     return false;
   }
 }
+
+// ───────────── Avisos de PDF nuevo en entrenamientos (por usuario) ─────────────
+
+// Ids de las sesiones de ENTRENAMIENTO con PDF vigente que el usuario de la
+// sesión todavía NO ha consultado. Lógica totalmente independiente de MULTAS.
+// Solo se aplica a jugadores y a planificaciones publicadas.
+export async function pendingPdfActivityIds(): Promise<Set<string>> {
+  const s = await getSession();
+  if (!s || s.role !== "PLAYER") return new Set();
+
+  try {
+    const acts = await prisma.activity.findMany({
+      where: {
+        type: "TRAINING",
+        fileName: { not: null },
+        plan: { published: true },
+      },
+      select: { id: true, fileVersion: true },
+    });
+    if (acts.length === 0) return new Set();
+
+    const views = await prisma.activityFileView.findMany({
+      where: { userId: s.userId, activityId: { in: acts.map((a) => a.id) } },
+      select: { activityId: true, version: true },
+    });
+    // Solo cuenta como visto si coincide la VERSIÓN vigente.
+    const seen = new Set(views.map((v) => `${v.activityId}:${v.version}`));
+
+    return new Set(
+      acts
+        .filter((a) => !seen.has(`${a.id}:${a.fileVersion}`))
+        .map((a) => a.id),
+    );
+  } catch (err) {
+    console.error("pendingPdfActivityIds", err);
+    return new Set();
+  }
+}
+
+// Aviso general de PLANIFICACIÓN: se calcula desde los documentos pendientes.
+export async function hasPendingPdf() {
+  return (await pendingPdfActivityIds()).size > 0;
+}
