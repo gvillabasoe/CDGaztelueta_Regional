@@ -79,6 +79,7 @@ model User {
   // Permiso económico independiente del rol: solo cambiar pendiente/pagada.
   canManageFinePayments Boolean @default(false)
   staffFines    Fine[]   @relation("StaffFines")
+  fileViews     ActivityFileView[]
 }
 
 // ── Ficha del jugador (7) ─────────────────────────────────────────
@@ -188,6 +189,9 @@ model Activity {
   fileData   Bytes?
   fileName   String?
   fileMime   String?
+  // Versión del PDF general: sube +1 en cada publicación/sustitución, de modo
+  // que las lecturas de la versión anterior no marcan la nueva como vista.
+  fileVersion Int         @default(0)
   orderIndex Int          @default(0)
   createdAt  DateTime     @default(now())
 
@@ -199,6 +203,7 @@ model Activity {
   matchRecord    MatchRecord?
   poll           Poll?
   leagueEntries  LeaguePointEntry[]
+  fileViews      ActivityFileView[]
 }
 
 // Ejercicio de un entrenamiento (8.4.2)
@@ -448,4 +453,20 @@ model TeamDocument {
   updatedAt     DateTime @updatedAt
   updatedById   String?
   updatedByName String?
+}
+
+// Consulta PERSONAL del PDF general de una sesión, por usuario y versión.
+// Una fila por (usuario, actividad, versión): la misma consulta repetida no
+// crea duplicados. La ausencia de fila para la versión vigente = "no visto".
+model ActivityFileView {
+  id         String   @id @default(cuid())
+  userId     String
+  activityId String
+  version    Int
+  viewedAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activityId, version])
 }
