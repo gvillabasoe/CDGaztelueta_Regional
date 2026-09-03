@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { awardPreview } from "@/lib/queries";
 import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import type { FineInput } from "@/lib/types";
@@ -150,4 +151,91 @@ export async function deleteFine(id: string) {
   await prisma.fine.delete({ where: { id } });
   revalidatePath("/multas");
   return { ok: true as const };
+}
+
+// ───────────── Premio "Jugador del Mes": aplicación ─────────────
+
+// Perdona las multas del GANADOR correspondientes al MES GANADO.
+// Idempotente: MonthlyAward.monthKey es único, así que no puede aplicarse dos
+// veces. No borra multas, no las convierte en pagadas y no altera pagos reales.
+export async function applyMonthlyAward(
+  monthKey: string,
+  confirmPayments = false,
+) {
+  const s = await coach();
+  if (!s) return { ok: false as const, error: "No autorizado." };
+  if (!/^\d{4}-\d{2}$/.test(monthKey))
+    return { ok: false as const, error: "Mes no válido." };
+
+  const preview = await awardPreview(monthKey);
+
+  if (preview.already)
+    return {
+      ok: false as const,
+      error: "El premio de este mes ya se aplicó anteriormente.",
+    };
+  if (!preview.monthOver)
+    return {
+      ok: false as const,
+      error: "El mes todavía no ha terminado: aún no hay ganador definitivo.",
+    };
+  if (!preview.winner)
+    return {
+      ok: false as const,
+      error: "Este mes no tiene un ganador con puntos.",
+    };
+
+  // Si hay dinero ya abonado, se exige confirmación expresa: no se inventan
+  // reembolsos ni se borran pagos reales.
+  if (preview.hasPayments && !confirmPayments)
+    return {
+      ok: false as const,
+      needsPaymentConfirm: true as const,
+      error:
+        "Alguna multa de ese mes ya tiene importes abonados. Esos pagos NO se devuelven ni se borran: " +
+        "solo se perdonará la parte que siga pendiente. Confirma para continuar.",
+    };
+
+  const toForgive = preview.fines.filter((f) => f.pending > 0 && !f.forgiven);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const f of toForgive) {
+        await tx.fine.update({
+          where: { id: f.id },
+          data: {
+            forgiven: true,
+            forgivenAt: new Date(),
+            forgivenById: s.userId,
+            forgivenByName: s.username,
+          },
+        });
+      }
+      // El registro con monthKey único garantiza una sola aplicación.
+      await tx.monthlyAward.create({
+        data: {
+          monthKey,
+          playerId: preview.winner!.id,
+          playerName: preview.winner!.name,
+          appliedById: s.userId,
+          appliedByName: s.username,
+          amountForgiven: toForgive.reduce((a, f) => a + f.pending, 0),
+          fineCount: toForgive.length,
+          note: preview.hasPayments
+            ? "Existían importes ya abonados que no se han modificado."
+            : null,
+        },
+      });
+    });
+
+    revalidatePath("/multas");
+    revalidatePath("/equipo/jugador-del-mes");
+    return { ok: true as const, count: toForgive.length };
+  } catch (err) {
+    console.error("applyMonthlyAward", monthKey, err);
+    return {
+      ok: false as const,
+      error: "No se ha podido aplicar el premio. Inténtalo de nuevo.",
+    };
+  }
 }

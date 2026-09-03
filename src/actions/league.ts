@@ -3,32 +3,94 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
+import { periodIdForDate, currentPeriod } from "@/lib/periods";
 
 async function coach() {
   const s = await getSession();
   return s && s.role === "COACH" ? s : null;
 }
 
-// Fija el total de puntos de la liga interna de un jugador.
+// Fija los puntos del jugador EN EL PERIODO EN CURSO. Se implementa como un
+// movimiento por la diferencia, de forma que la clasificación del periodo
+// siempre puede reconstruirse desde los movimientos.
 export async function setPlayerPoints(playerId: string, points: number) {
-  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
-  await prisma.player.update({
-    where: { id: playerId },
-    data: { leaguePoints: Math.round(points) || 0 },
-  });
-  revalidatePath("/liga");
-  return { ok: true as const };
+  const s = await coach();
+  if (!s) return { ok: false as const, error: "No autorizado." };
+  try {
+    const period = await currentPeriod();
+    if (!period)
+      return {
+        ok: false as const,
+        error: "No hay ningún periodo de liga en curso ahora mismo.",
+      };
+
+    const agg = await prisma.leaguePointEntry.aggregate({
+      where: { playerId, periodId: period.id },
+      _sum: { points: true },
+    });
+    const currentInPeriod = agg._sum.points ?? 0;
+    const target = Math.round(points) || 0;
+    const delta = target - currentInPeriod;
+    if (delta === 0) return { ok: true as const };
+    return await adjustPlayerPoints(playerId, delta, "Ajuste manual");
+  } catch (err) {
+    console.error("setPlayerPoints", err);
+    return {
+      ok: false as const,
+      error: "No se han podido guardar los puntos. Inténtalo de nuevo.",
+    };
+  }
 }
 
-// Suma o resta puntos.
-export async function adjustPlayerPoints(playerId: string, delta: number) {
-  if (!(await coach())) return { ok: false as const, error: "No autorizado." };
-  await prisma.player.update({
-    where: { id: playerId },
-    data: { leaguePoints: { increment: Math.round(delta) } },
-  });
-  revalidatePath("/liga");
-  return { ok: true as const };
+// Suma o resta puntos: crea un movimiento en el periodo en curso y actualiza el
+// acumulado histórico del jugador.
+export async function adjustPlayerPoints(
+  playerId: string,
+  delta: number,
+  note = "Ajuste manual",
+) {
+  const s = await coach();
+  if (!s) return { ok: false as const, error: "No autorizado." };
+  const value = Math.round(delta);
+  if (!value) return { ok: true as const };
+
+  try {
+    const now = new Date();
+    const periodId = await periodIdForDate(now);
+    if (!periodId)
+      return {
+        ok: false as const,
+        error: "No hay ningún periodo de liga en curso ahora mismo.",
+      };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.leaguePointEntry.create({
+        data: {
+          playerId,
+          periodId,
+          date: now,
+          points: value,
+          note,
+          coachId: s.userId,
+          coachName: s.username,
+        },
+      });
+      await tx.player.update({
+        where: { id: playerId },
+        data: { leaguePoints: { increment: value } },
+      });
+    });
+
+    revalidatePath("/liga");
+    revalidatePath(`/equipo/${playerId}`);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("adjustPlayerPoints", err);
+    return {
+      ok: false as const,
+      error: "No se han podido guardar los puntos. Inténtalo de nuevo.",
+    };
+  }
 }
 
 import type { AssignEntry } from "@/lib/types";
@@ -66,6 +128,9 @@ export async function assignExercisePoints(
     (e) => e.playerId && Number.isFinite(e.points),
   );
 
+  // El periodo se decide por la fecha del entrenamiento, no por la de registro.
+  const periodId = await periodIdForDate(ex.activity.date);
+
   await prisma.$transaction(async (tx) => {
     for (const e of valid) {
       const points = Math.round(e.points);
@@ -82,6 +147,7 @@ export async function assignExercisePoints(
             date: ex.activity.date,
             exerciseName: ex.task,
             activityId: ex.activityId,
+            periodId,
             coachId: s.userId,
             coachName: s.username,
           },
@@ -98,6 +164,7 @@ export async function assignExercisePoints(
             exerciseId,
             activityId: ex.activityId,
             exerciseName: ex.task,
+            periodId,
             date: ex.activity.date,
             points,
             note: e.note?.trim() || null,
