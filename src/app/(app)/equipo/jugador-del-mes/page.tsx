@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, Star, Settings, Check, Trophy } from "lucide-react";
+import {
+  ChevronLeft,
+  Settings,
+  Check,
+  Trophy,
+  ChevronRight,
+} from "lucide-react";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,9 +14,18 @@ import {
   monthlyClassification,
   winnersHistory,
   pollAdminData,
+  publicBallots,
+  awardPreview,
 } from "@/lib/queries";
-import { formatDateLong, formatDateTime } from "@/lib/format";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import {
+  formatDateLong,
+  formatDateShort,
+  formatDateTime,
+  formatDateTimeShort,
+} from "@/lib/format";
+import { Avatar } from "@/components/Avatar";
+import { PublicVotes } from "./PublicVotes";
+import { AwardPanel, type AwardData } from "./AwardPanel";
 import { MonthSelect } from "./MonthSelect";
 import { AutoRefresh } from "./AutoRefresh";
 
@@ -47,7 +62,35 @@ export default async function JugadorDelMesPage({
 
   const openNow = !!poll && poll.status === "OPEN" && now < poll.closesAt;
 
+  // Premio del mes seleccionado (la aplicación es solo del entrenador).
+  let award: AwardData | null = null;
+  if (isCoach) {
+    const pv = await awardPreview(monthKey);
+    award = {
+      monthKey,
+      monthLabel: monthLabel(monthKey),
+      monthOver: pv.monthOver,
+      alreadyApplied: !!pv.already,
+      appliedLabel: pv.already
+        ? `${pv.already.playerName} · ${formatDateTimeShort(pv.already.appliedAt)}`
+        : null,
+      winnerName: pv.winner?.name ?? null,
+      totalPending: pv.totalPending,
+      hasPayments: pv.hasPayments,
+      fines: pv.fines.map((f) => ({
+        id: f.id,
+        dateLabel: formatDateShort(f.date),
+        concept: f.concept,
+        amount: f.amount,
+        paid: f.paid,
+        pending: f.pending,
+        forgiven: f.forgiven,
+      })),
+    };
+  }
+
   let pollBlock: React.ReactNode = null;
+  let publicList: React.ComponentProps<typeof PublicVotes>["ballots"] = [];
   if (poll) {
     const cancelled = poll.status === "CANCELLED";
     const accepting = poll.status === "OPEN" && now < poll.closesAt;
@@ -106,6 +149,19 @@ export default async function JugadorDelMesPage({
 
     let admin: Awaited<ReturnType<typeof pollAdminData>> = null;
     if (isCoach) admin = await pollAdminData(poll.id);
+
+    // Papeletas PÚBLICAS del partido (solo válidas: las anuladas se excluyen).
+    const rawBallots = await publicBallots(poll.id);
+    publicList = rawBallots.map((b) => ({
+      id: b.id,
+      voterName: b.voterName,
+      voterPhoto: b.voterPhoto,
+      onBehalf: b.onBehalf,
+      dateLabel: formatDateTimeShort(b.createdAt),
+      first: { name: b.first.name, photo: b.first.photo },
+      second: { name: b.second.name, photo: b.second.photo },
+      third: { name: b.third.name, photo: b.third.photo },
+    }));
 
     const miVotacion = (
       <div>
@@ -242,6 +298,38 @@ export default async function JugadorDelMesPage({
 
       {pollBlock}
 
+      {/* Premio del mes: visible para jugadores y entrenadores */}
+      <div className="rounded-xl border border-[#C9A227] bg-[#F7E7A6] p-3">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-[#4A3B08]">
+          <Trophy size={16} /> PREMIO JUGADOR DEL MES
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-negro">
+          El jugador que termine el mes en primera posición quedará exento de
+          pagar todas las multas que haya acumulado durante ese mismo mes.
+        </p>
+      </div>
+
+      {award && <AwardPanel data={award} />}
+
+      {/* VOTOS DEL PARTIDO: las papeletas son públicas */}
+      {poll && (
+        <div>
+          <h2 className="eyebrow mb-2 px-1">Votos del partido</h2>
+          <div className="card p-4">
+            <PublicVotes ballots={publicList} />
+          </div>
+          <Link
+            href="/equipo/jugador-del-mes/votos"
+            className="card mt-2 flex items-center justify-between p-3 transition hover:bg-beige/60"
+          >
+            <span className="text-sm font-medium text-negro">
+              Historial de votos por partido
+            </span>
+            <ChevronRight size={18} className="text-gris" />
+          </Link>
+        </div>
+      )}
+
       {/* Clasificación mensual (provisional mientras haya votación abierta) */}
       <div>
         <h2 className="eyebrow mb-2 px-1">Clasificación mensual</h2>
@@ -269,31 +357,47 @@ export default async function JugadorDelMesPage({
                 <div
                   key={r.id}
                   className={
-                    "card flex items-center gap-3 p-3 " +
-                    (first ? "bg-amarillo/25 ring-1 ring-dorado" : "")
+                    "flex items-center gap-3 rounded-2xl p-3 " +
+                    (first
+                      ? "border border-[#C9A227] bg-[#F7E7A6] shadow-card"
+                      : "card")
                   }
                 >
                   <div className="flex w-7 justify-center">
-                    {first ? (
-                      <Star size={18} className="text-dorado" />
-                    ) : (
-                      <span className="text-sm font-semibold text-gris">
-                        {i + 1}
-                      </span>
-                    )}
+                    <span
+                      className={
+                        "text-sm font-bold " +
+                        (first ? "text-[#4A3B08]" : "text-gris")
+                      }
+                    >
+                      {i + 1}
+                    </span>
                   </div>
-                  <PlayerAvatar
-                    photo={r.photo}
-                    firstName={r.name.split(" ")[0] ?? ""}
-                    lastName={r.name.split(" ").slice(1).join(" ")}
-                    size={38}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-medium text-negro">
-                    {r.name}
+                  <Avatar photo={r.photo} name={r.name} size={38} />
+                  <span
+                    className={
+                      "flex min-w-0 flex-1 items-center gap-1.5 font-semibold " +
+                      (first ? "text-[#4A3B08]" : "text-negro")
+                    }
+                  >
+                    <span className="truncate">{r.name}</span>
+                    {first && (
+                      <Trophy size={15} className="shrink-0 text-[#8A6F16]" />
+                    )}
                   </span>
-                  <span className="font-display text-lg font-bold text-marino">
+                  <span
+                    className={
+                      "font-display text-lg font-bold " +
+                      (first ? "text-[#4A3B08]" : "text-marino")
+                    }
+                  >
                     {r.points}
-                    <span className="ml-1 text-[11px] font-semibold text-gris">
+                    <span
+                      className={
+                        "ml-1 text-[11px] font-semibold " +
+                        (first ? "text-[#6B5510]" : "text-gris")
+                      }
+                    >
                       pts
                     </span>
                   </span>
@@ -316,12 +420,7 @@ export default async function JugadorDelMesPage({
             {winners.map((w) => (
               <div key={w.monthKey} className="card flex items-center gap-3 p-3">
                 <Trophy size={18} className="text-dorado" />
-                <PlayerAvatar
-                  photo={w.photo}
-                  firstName={w.name.split(" ")[0] ?? ""}
-                  lastName={w.name.split(" ").slice(1).join(" ")}
-                  size={36}
-                />
+                <Avatar photo={w.photo} name={w.name} size={36} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-negro">{w.name}</p>
                   <p className="text-xs capitalize text-gris">

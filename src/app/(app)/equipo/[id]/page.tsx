@@ -8,7 +8,8 @@ import {
   findPlayerByAnyId,
 } from "@/lib/queries";
 import { formatDateShort } from "@/lib/format";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Avatar } from "@/components/Avatar";
+import { publicName } from "@/lib/profile";
 import { FichaForm, type FichaData } from "../FichaForm";
 import { LeagueHistory } from "../LeagueHistory";
 
@@ -99,10 +100,9 @@ export default async function FichaPage({
       {back}
       <div className="card p-5">
         <div className="flex items-center gap-4">
-          <PlayerAvatar
+          <Avatar
             photo={p.photo ?? null}
-            firstName={p.firstName ?? ""}
-            lastName={p.lastName ?? ""}
+            name={publicName(p.nickname, p.firstName, p.lastName)}
             size={72}
           />
           <div>

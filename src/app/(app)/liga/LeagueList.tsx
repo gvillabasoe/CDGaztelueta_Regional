@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Pencil, Check, X, Loader2 } from "lucide-react";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Avatar } from "@/components/Avatar";
+import { publicName } from "@/lib/profile";
 import { setPlayerPoints, adjustPlayerPoints } from "@/actions/league";
 
 type P = {
@@ -12,6 +13,7 @@ type P = {
   lastName: string;
   photo: string | null;
   leaguePoints: number;
+  nickname?: string | null;
 };
 
 export function LeagueList({
@@ -57,84 +59,68 @@ export function LeagueList({
     );
   }
 
-  // Podio: se calcula a partir de la POSICIÓN ya ordenada (nunca se guarda en
-  // la ficha del jugador). El relleno afecta a la FILA COMPLETA y se acompaña
-  // de medalla, número de posición y etiqueta de texto.
-  const PODIUM = [
-    {
-      label: "Oro",
-      medal: "🥇",
-      row: "bg-[#F7E7A6] border border-[#C9A227] shadow-card",
-      badge: "bg-[#C9A227] text-[#1A1A1A]",
-      text: "text-[#4A3B08]",
-    },
-    {
-      label: "Plata",
-      medal: "🥈",
-      row: "bg-[#E4E6EA] border border-[#9AA0A6] shadow-card",
-      badge: "bg-[#7E848B] text-blanco",
-      text: "text-[#2F3337]",
-    },
-    {
-      label: "Bronce",
-      medal: "🥉",
-      row: "bg-[#EFD9BE] border border-[#B08D57] shadow-card",
-      badge: "bg-[#9C7742] text-blanco",
-      text: "text-[#4A3520]",
-    },
-  ];
+  // Zona de Castigo: se calcula SIEMPRE a partir de la posición actual y nunca
+  // se guarda en la ficha del jugador. Las posiciones 1-10 usan el diseño
+  // normal; desde la 11 hasta la última, fondo rojo claro con etiqueta.
+  const PUNISHMENT_FROM = 11;
 
   return (
     <div className="space-y-2">
+      {/* Regla de la Zona de Castigo: informativa, sin efectos económicos */}
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-red-800">
+          <span aria-hidden>⚠</span> ZONA DE CASTIGO
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-negro">
+          Los jugadores que terminen cada periodo de dos meses desde la posición
+          11 hasta la última deberán invitar al equipo a tortillas y pinchos.
+        </p>
+      </div>
+
       {sorted.map((p, i) => {
-        const podium = i < 3 ? PODIUM[i] : null;
+        const inPunishment = i + 1 >= PUNISHMENT_FROM;
         return (
         <div
           key={p.id}
           className={
             "flex items-center gap-3 rounded-2xl p-3 " +
-            (podium ? podium.row : "card")
+            (inPunishment
+              ? "border border-red-300 bg-red-50 shadow-card"
+              : "card")
           }
         >
           <div className="flex w-9 shrink-0 flex-col items-center justify-center">
-            {podium ? (
-              <>
-                <span aria-hidden className="text-lg leading-none">
-                  {podium.medal}
-                </span>
-                <span
-                  className={
-                    "mt-0.5 rounded px-1 text-[10px] font-bold leading-tight " +
-                    podium.badge
-                  }
-                >
-                  {i + 1}º
-                </span>
-                <span className="sr-only">
-                  Posición {i + 1}, {podium.label}
-                </span>
-              </>
-            ) : (
-              <span className="text-sm font-semibold text-gris">{i + 1}</span>
+            <span
+              className={
+                "text-sm font-bold " +
+                (inPunishment ? "text-red-700" : "text-gris")
+              }
+            >
+              {i + 1}
+            </span>
+            {inPunishment && (
+              <span aria-hidden className="text-[13px] leading-none">
+                ⚠
+              </span>
             )}
           </div>
-          <PlayerAvatar
+          <Avatar
             photo={p.photo}
-            firstName={p.firstName}
-            lastName={p.lastName}
+            name={publicName(p.nickname, p.firstName, p.lastName)}
             size={40}
           />
           <div className="min-w-0 flex-1">
             <p
               className={
-                "truncate font-semibold " + (podium ? podium.text : "text-negro")
+                "truncate font-semibold " +
+                (inPunishment ? "text-red-900" : "text-negro")
               }
             >
-              {p.firstName} {p.lastName}
+              {publicName(p.nickname, p.firstName, p.lastName)}
             </p>
-            {podium && (
-              <p className={"text-[11px] font-bold uppercase " + podium.text}>
-                {podium.label}
+            {inPunishment && (
+              <p className="text-[11px] font-bold uppercase text-red-700">
+                Zona de castigo
               </p>
             )}
           </div>
@@ -178,7 +164,7 @@ export function LeagueList({
               <span
                 className={
                   "min-w-[3rem] text-right font-display text-xl font-bold " +
-                  (podium ? podium.text : "text-marino")
+                  (inPunishment ? "text-red-800" : "text-marino")
                 }
               >
                 {busy === p.id ? (
@@ -189,7 +175,7 @@ export function LeagueList({
                 <span
                   className={
                     "ml-1 text-[11px] font-semibold " +
-                    (podium ? podium.text : "text-gris")
+                    (inPunishment ? "text-red-700" : "text-gris")
                   }
                 >
                   pts

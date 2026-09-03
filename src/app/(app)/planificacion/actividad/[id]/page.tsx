@@ -191,21 +191,31 @@ export default async function ActivityPage({
         </section>
       )}
 
-      {/* Contenido del entrenamiento: PDF + ejercicios */}
+      {/* Documento (PDF): disponible en entrenamientos Y partidos */}
+      <section className="card p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <FileText size={16} className="text-marino" />
+          <h2 className="font-semibold text-negro">
+            {isMatch ? "Documento del partido (PDF)" : "Documento (PDF)"}
+          </h2>
+        </div>
+        {isMatch && isCoach && (
+          <p className="mb-2 text-xs text-gris">
+            Adjunta la convocatoria, el plan de partido, información del rival,
+            horarios o el punto de encuentro.
+          </p>
+        )}
+        <PdfManager
+          activityId={activity.id}
+          isCoach={isCoach}
+          fileName={activity.fileName}
+          pdfPending={pdfPendingHere}
+        />
+      </section>
+
+      {/* Ejercicios: solo entrenamiento */}
       {!isMatch && (
         <>
-          <section className="card p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <FileText size={16} className="text-marino" />
-              <h2 className="font-semibold text-negro">Documento (PDF)</h2>
-            </div>
-            <PdfManager
-              activityId={activity.id}
-              isCoach={isCoach}
-              fileName={activity.fileName}
-              pdfPending={pdfPendingHere}
-            />
-          </section>
 
           <section className="card p-4">
             <div className="mb-3 flex items-center gap-2">

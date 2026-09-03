@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { currentPlayer, lastTraining, playerRatings } from "@/lib/queries";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Avatar } from "@/components/Avatar";
 import { formatDateLong } from "@/lib/format";
 import { RateExercises } from "./RateExercises";
 
@@ -36,6 +36,9 @@ export default async function PerfilPage() {
           <p className="mt-4 text-sm text-gris">
             Puedes gestionar los datos del equipo en Configuración.
           </p>
+          <Link href="/mas/perfil/editar" className="btn-primary mt-4 w-full">
+            Editar perfil
+          </Link>
         </div>
       </div>
     );
@@ -70,10 +73,9 @@ export default async function PerfilPage() {
 
       <div className="card p-5">
         <div className="flex items-center gap-4">
-          <PlayerAvatar
+          <Avatar
             photo={player.photo}
-            firstName={player.firstName}
-            lastName={player.lastName}
+            name={`${player.firstName} ${player.lastName}`}
             size={64}
           />
           <div>
@@ -98,6 +100,10 @@ export default async function PerfilPage() {
             </div>
           </div>
         </div>
+        {/* Ver la foto y editarla son acciones distintas */}
+        <Link href="/mas/perfil/editar" className="btn-primary mt-4 w-full">
+          Editar perfil
+        </Link>
       </div>
 
       <div className="card p-5">

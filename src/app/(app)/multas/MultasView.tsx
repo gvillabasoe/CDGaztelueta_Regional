@@ -37,7 +37,7 @@ const MONTHS = [
   "Diciembre",
 ];
 
-type Status = "PENDIENTE" | "PARCIAL" | "PAGADO";
+type Status = "PENDIENTE" | "PARCIAL" | "PAGADO" | "PERDONADA";
 type Fine = {
   id: string;
   dateShort: string;
@@ -60,6 +60,11 @@ type Group = {
 };
 
 function statusMeta(s: Status) {
+  if (s === "PERDONADA")
+    return {
+      label: "PERDONADA – PREMIO JUGADOR DEL MES",
+      cls: "bg-dorado/25 text-negro",
+    };
   if (s === "PAGADO") return { label: "Pagado", cls: "bg-green-100 text-green-700" };
   if (s === "PARCIAL") return { label: "Pago parcial", cls: "bg-amarillo/30 text-negro" };
   return { label: "Pendiente", cls: "bg-red-100 text-red-700" };

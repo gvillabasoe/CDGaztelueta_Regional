@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import type { DocKind } from "@/lib/types";
+import { publicName } from "@/lib/profile";
 
 // Jugador asociado al usuario de la sesión (o null si es entrenador).
 export async function currentPlayer() {
@@ -254,13 +255,19 @@ export async function monthlyClassification(monthKey: string) {
         ...(scoredIds.length ? [{ id: { in: scoredIds } }] : []),
       ],
     },
-    select: { id: true, firstName: true, lastName: true, photo: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      photo: true,
+    },
   });
 
   return players
     .map((pl) => ({
       id: pl.id,
-      name: `${pl.firstName} ${pl.lastName}`,
+      name: publicName(pl.nickname, pl.firstName, pl.lastName),
       photo: pl.photo,
       points: pts.get(pl.id) ?? 0,
     }))
@@ -480,6 +487,17 @@ export async function staffLite() {
 }
 
 // Cantidad pagada efectiva (compatible con multas antiguas marcadas "paid" sin importe).
+// Pendiente real de una multa: 0 si fue perdonada por el premio.
+export function pendingOfFine(f: {
+  amountPaid: number;
+  paid: boolean;
+  amount: number;
+  forgiven?: boolean;
+}) {
+  if (f.forgiven) return 0;
+  return Math.max(0, f.amount - paidOfFine(f));
+}
+
 export function paidOfFine(f: {
   amountPaid: number;
   paid: boolean;
@@ -512,16 +530,22 @@ export async function myFinesSummary() {
 
     const fines = await prisma.fine.findMany({
       where: { OR: or },
-      select: { amount: true, amountPaid: true, paid: true },
+      select: {
+        amount: true,
+        amountPaid: true,
+        paid: true,
+        forgiven: true,
+      },
     });
 
     let total = 0,
-      paid = 0;
+      paid = 0,
+      pending = 0;
     for (const f of fines) {
       total += f.amount;
-      paid += paidOfFine(f);
+      paid += paidOfFine(f); // dinero realmente abonado
+      pending += pendingOfFine(f); // lo perdonado no es deuda
     }
-    const pending = Math.max(0, total - paid);
     return {
       pending,
       total,
@@ -555,7 +579,7 @@ export async function canManageFinePayments() {
 
 // ───────────── Avisos de PDF nuevo en entrenamientos (por usuario) ─────────────
 
-// Ids de las sesiones de ENTRENAMIENTO con PDF vigente que el usuario de la
+// Ids de las actividades (entrenamientos y partidos) con PDF vigente que el usuario de la
 // sesión todavía NO ha consultado. Lógica totalmente independiente de MULTAS.
 // Solo se aplica a jugadores y a planificaciones publicadas.
 export async function pendingPdfActivityIds(): Promise<Set<string>> {
@@ -565,7 +589,7 @@ export async function pendingPdfActivityIds(): Promise<Set<string>> {
   try {
     const acts = await prisma.activity.findMany({
       where: {
-        type: "TRAINING",
+        // Entrenamientos Y partidos: un único aviso general.
         fileName: { not: null },
         plan: { published: true },
       },
@@ -594,4 +618,331 @@ export async function pendingPdfActivityIds(): Promise<Set<string>> {
 // Aviso general de PLANIFICACIÓN: se calcula desde los documentos pendientes.
 export async function hasPendingPdf() {
   return (await pendingPdfActivityIds()).size > 0;
+}
+
+// ─────────── Votos PÚBLICOS de "Jugador del Mes" (§10 y §11) ───────────
+
+// Papeletas válidas de una votación con el reparto de 3, 2 y 1 punto.
+// Las papeletas anuladas quedan EXCLUIDAS: nunca se muestran como válidas.
+export async function publicBallots(pollId: string) {
+  const ballots = await prisma.ballot.findMany({
+    where: { pollId, excluded: false },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      voterId: true,
+      onBehalfOfId: true,
+      firstId: true,
+      secondId: true,
+      thirdId: true,
+      createdAt: true,
+    },
+  });
+  if (ballots.length === 0) return [];
+
+  // Perfiles públicos implicados (votantes y receptores).
+  const players = await prisma.player.findMany({
+    select: {
+      id: true,
+      userId: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      photo: true,
+    },
+  });
+  const staff = await prisma.user.findMany({
+    where: { role: "COACH" },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      nickname: true,
+      photo: true,
+    },
+  });
+
+  const byPlayerId = new Map(players.map((p) => [p.id, p]));
+  const byUserId = new Map(
+    players.filter((p) => p.userId).map((p) => [p.userId as string, p]),
+  );
+  const staffById = new Map(staff.map((u) => [u.id, u]));
+
+  const receiver = (id: string) => {
+    const p = byPlayerId.get(id);
+    return {
+      id,
+      name: p
+        ? publicName(p.nickname, p.firstName, p.lastName)
+        : "Jugador",
+      photo: p?.photo ?? null,
+    };
+  };
+
+  return ballots.map((b) => {
+    // Votante: jugador con cuenta, miembro del cuerpo técnico, o voto
+    // registrado por el entrenador en nombre de un jugador sin cuenta.
+    let voterName = "Votante";
+    let voterPhoto: string | null = null;
+    let onBehalf = false;
+
+    if (b.onBehalfOfId) {
+      const p = byPlayerId.get(b.onBehalfOfId);
+      voterName = p
+        ? publicName(p.nickname, p.firstName, p.lastName)
+        : "Jugador";
+      voterPhoto = p?.photo ?? null;
+      onBehalf = true;
+    } else {
+      const p = byUserId.get(b.voterId);
+      if (p) {
+        voterName = publicName(p.nickname, p.firstName, p.lastName);
+        voterPhoto = p.photo;
+      } else {
+        const u = staffById.get(b.voterId);
+        if (u) {
+          voterName = publicName(
+            u.nickname,
+            u.displayName ?? u.username,
+            null,
+            u.username,
+          );
+          voterPhoto = u.photo;
+        }
+      }
+    }
+
+    return {
+      id: b.id,
+      voterName,
+      voterPhoto,
+      onBehalf,
+      createdAt: b.createdAt,
+      first: receiver(b.firstId),
+      second: receiver(b.secondId),
+      third: receiver(b.thirdId),
+    };
+  });
+}
+
+// Historial público: votaciones por mes, con su partido real asociado.
+export async function pollsHistory() {
+  return prisma.poll.findMany({
+    where: { status: { not: "CANCELLED" } },
+    orderBy: { activity: { date: "desc" } },
+    select: {
+      id: true,
+      monthKey: true,
+      status: true,
+      closesAt: true,
+      activity: {
+        select: {
+          id: true,
+          date: true,
+          opponent: true,
+          matchday: true,
+          kitLocal: true,
+        },
+      },
+      _count: { select: { ballots: true } },
+    },
+  });
+}
+
+// ───────────── Premio "Jugador del Mes": vista previa y estado ─────────────
+
+// ¿Ha terminado ya el mes (Europe/Madrid)? El premio solo se aplica a meses
+// finalizados, cuando el ganador es definitivo.
+export function monthIsOver(monthKey: string): boolean {
+  const nowYm = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+  })
+    .format(new Date())
+    .slice(0, 7);
+  return monthKey < nowYm;
+}
+
+// Resumen previo a aplicar el premio: ganador, multas del MES GANADO y su
+// situación de pago. No modifica nada.
+export async function awardPreview(monthKey: string) {
+  try {
+    const already = await prisma.monthlyAward.findUnique({
+      where: { monthKey },
+    });
+
+    const table = await monthlyClassification(monthKey);
+    const top = table[0];
+    const winner = top && top.points > 0 ? top : null;
+
+    if (!winner)
+      return {
+        monthKey,
+        monthOver: monthIsOver(monthKey),
+        already,
+        winner: null,
+        fines: [],
+        totalPending: 0,
+        hasPayments: false,
+      };
+
+    const [y, m] = monthKey.split("-").map((x) => parseInt(x, 10));
+    const from = new Date(y, m - 1, 1, 0, 0, 0, 0);
+    const to = new Date(y, m, 1, 0, 0, 0, 0);
+
+    // Se usa la FECHA DE LA INFRACCIÓN, no la de pago ni la de aplicación.
+    const raw = await prisma.fine.findMany({
+      where: { playerId: winner.id, date: { gte: from, lt: to } },
+      orderBy: { date: "asc" },
+    });
+
+    const fines = raw.map((f) => ({
+      id: f.id,
+      date: f.date,
+      concept: f.concept,
+      amount: f.amount,
+      paid: paidOfFine(f),
+      pending: pendingOfFine(f),
+      forgiven: f.forgiven,
+    }));
+
+    return {
+      monthKey,
+      monthOver: monthIsOver(monthKey),
+      already,
+      winner,
+      fines,
+      totalPending: fines.reduce((a, f) => a + f.pending, 0),
+      // Alguna multa del mes ya tiene dinero abonado: hay que avisar (§15.5).
+      hasPayments: fines.some((f) => f.paid > 0),
+    };
+  } catch (err) {
+    console.error("awardPreview", monthKey, err);
+    return {
+      monthKey,
+      monthOver: false,
+      already: null,
+      winner: null,
+      fines: [],
+      totalPending: 0,
+      hasPayments: false,
+    };
+  }
+}
+
+// ───────────── LIGA interna por periodos bimensuales (§16-17, §20-23) ─────────────
+
+// Clasificación del periodo indicado: se agrega EN VIVO desde los movimientos
+// de ese periodo, nunca desde el acumulado histórico del jugador.
+export async function leagueTableForPeriod(periodId: string) {
+  const entries = await prisma.leaguePointEntry.findMany({
+    where: { periodId },
+    select: { playerId: true, points: true },
+  });
+  const totals = new Map<string, number>();
+  for (const e of entries)
+    totals.set(e.playerId, (totals.get(e.playerId) ?? 0) + e.points);
+
+  const scored = [...totals.keys()];
+  const players = await prisma.player.findMany({
+    where: {
+      OR: [
+        { status: "ACTIVE" },
+        ...(scored.length ? [{ id: { in: scored } }] : []),
+      ],
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      photo: true,
+    },
+  });
+
+  return players
+    .map((p) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      nickname: p.nickname,
+      photo: p.photo,
+      leaguePoints: totals.get(p.id) ?? 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.leaguePoints - a.leaguePoints ||
+        publicName(a.nickname, a.firstName, a.lastName).localeCompare(
+          publicName(b.nickname, b.firstName, b.lastName),
+          "es",
+        ),
+    );
+}
+
+// Todos los periodos, del más reciente al más antiguo.
+export async function leaguePeriods() {
+  return prisma.leaguePeriod.findMany({
+    orderBy: { startDate: "desc" },
+    select: {
+      id: true,
+      key: true,
+      name: true,
+      startDate: true,
+      endDate: true,
+      closed: true,
+      closedAt: true,
+    },
+  });
+}
+
+// Clasificación final GUARDADA de un periodo cerrado (no se recalcula).
+export async function periodResults(periodId: string) {
+  const rows = await prisma.leaguePeriodResult.findMany({
+    where: { periodId },
+    orderBy: { position: "asc" },
+    select: {
+      playerId: true,
+      playerName: true,
+      position: true,
+      points: true,
+      inPunishment: true,
+      player: {
+        select: {
+          firstName: true,
+          lastName: true,
+          nickname: true,
+          photo: true,
+        },
+      },
+    },
+  });
+  // El nombre visible usa el perfil público ACTUAL (mote/foto al día) y, si la
+  // ficha ya no existe, el nombre guardado en el cierre como respaldo.
+  return rows.map((r) => ({
+    playerId: r.playerId,
+    position: r.position,
+    points: r.points,
+    inPunishment: r.inPunishment,
+    name: r.player
+      ? publicName(
+          r.player.nickname,
+          r.player.firstName,
+          r.player.lastName,
+          r.playerName,
+        )
+      : r.playerName,
+    photo: r.player?.photo ?? null,
+  }));
+}
+
+// Movimientos históricos que no se pudieron asignar a ningún periodo.
+// No se inventan fechas ni se inyectan en el periodo actual (§23).
+export async function unassignedLeagueEntries() {
+  try {
+    return await prisma.leaguePointEntry.count({ where: { periodId: null } });
+  } catch (err) {
+    console.error("unassignedLeagueEntries", err);
+    return 0;
+  }
 }

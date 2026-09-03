@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { Search, UserPlus, Star, ChevronRight, Users } from "lucide-react";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Avatar } from "@/components/Avatar";
+import { publicName } from "@/lib/profile";
 
 type P = {
   id: string;
@@ -137,10 +138,9 @@ export function RosterView({
             className="card flex items-center gap-3 p-3 transition hover:bg-beige/60"
           >
             <div className="relative">
-              <PlayerAvatar
+              <Avatar
                 photo={p.photo}
-                firstName={p.firstName}
-                lastName={p.lastName}
+                name={publicName(p.nickname, p.firstName, p.lastName)}
                 size={44}
               />
               {p.number != null && (

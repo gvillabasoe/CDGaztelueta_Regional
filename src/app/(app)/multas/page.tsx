@@ -7,13 +7,14 @@ import {
   myFinesSummary,
   canManageFinePayments,
   paidOfFine,
+  pendingOfFine,
 } from "@/lib/queries";
 import { formatDateShort, toDateInputValue } from "@/lib/format";
 import { MultasView } from "./MultasView";
 
 export const dynamic = "force-dynamic";
 
-type Status = "PENDIENTE" | "PARCIAL" | "PAGADO";
+type Status = "PENDIENTE" | "PARCIAL" | "PAGADO" | "PERDONADA";
 
 export default async function MultasPage({
   searchParams,
@@ -69,9 +70,14 @@ export default async function MultasPage({
     .map(([key, { kind, name, fines: list }]) => {
       const items = list.map((f) => {
         const paid = paidOfFine(f);
-        const pending = Math.max(0, f.amount - paid);
-        const status: Status =
-          pending <= 0 ? "PAGADO" : paid > 0 ? "PARCIAL" : "PENDIENTE";
+        const pending = pendingOfFine(f);
+        const status: Status = f.forgiven
+          ? "PERDONADA"
+          : pending <= 0
+            ? "PAGADO"
+            : paid > 0
+              ? "PARCIAL"
+              : "PENDIENTE";
         return {
           id: f.id,
           dateShort: formatDateShort(f.date),

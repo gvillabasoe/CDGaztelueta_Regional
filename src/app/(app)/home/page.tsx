@@ -11,7 +11,20 @@ export default async function HomePage() {
   const isCoach = session?.role === "COACH";
 
   const nm = await prisma.nextMatch.findUnique({ where: { id: 1 } });
-  const standings = await prisma.officialStanding.findMany();
+  const standings = await prisma.officialStanding.findMany({
+    select: {
+      id: true,
+      teamName: true,
+      played: true,
+      won: true,
+      drawn: true,
+      lost: true,
+      goalsFor: true,
+      goalsAgainst: true,
+      points: true,
+      crestName: true, // solo para saber si hay imagen (los bytes se sirven aparte)
+    },
+  });
 
   // Preferencia personal de ocultar la clasificación.
   let hideStandings = false;
@@ -50,6 +63,7 @@ export default async function HomePage() {
           goalsFor: s.goalsFor,
           goalsAgainst: s.goalsAgainst,
           points: s.points,
+          hasCrest: !!s.crestName,
         }))}
       />
     </div>
