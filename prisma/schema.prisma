@@ -80,6 +80,8 @@ model User {
   canManageFinePayments Boolean @default(false)
   staffFines    Fine[]   @relation("StaffFines")
   fileViews     ActivityFileView[]
+  photo         String? // foto de perfil propia (data URL) — cuerpo técnico
+  nickname      String? // mote propio — cuerpo técnico
 }
 
 // ── Ficha del jugador (7) ─────────────────────────────────────────
@@ -121,6 +123,7 @@ model Player {
   subsOut         Substitution[]   @relation("SubOut")
   pollCandidacies Poll[]           @relation("PollCandidates")
   leagueEntries   LeaguePointEntry[]
+  periodResults   LeaguePeriodResult[]
 }
 
 // ── Datos generales del club (1) ──────────────────────────────────
@@ -149,6 +152,9 @@ model NextMatch {
 
 // ── Clasificación oficial (5.2), editable por el entrenador ───────
 model OfficialStanding {
+  crestData Bytes? // escudo o foto del club (opcional)
+  crestMime String?
+  crestName String?
   id            String   @id @default(cuid())
   teamName      String
   played        Int      @default(0)
@@ -359,6 +365,12 @@ model Fine {
   amount      Float // importe
   paid        Boolean  @default(false) // pagado por completo (derivado de amountPaid)
   amountPaid  Float    @default(0) // cantidad abonada (permite pagos parciales)
+  // Exención por el premio "Jugador del Mes": la multa NO se borra ni se
+  // convierte en pagada; deja de contar como deuda y conserva su importe.
+  forgiven      Boolean   @default(false)
+  forgivenAt    DateTime?
+  forgivenById  String?
+  forgivenByName String?
   createdAt   DateTime @default(now())
   player      Player?  @relation(fields: [playerId], references: [id], onDelete: Cascade)
   staffUser   User?    @relation("StaffFines", fields: [staffUserId], references: [id], onDelete: Cascade)
@@ -425,6 +437,7 @@ model VoteLog {
 model LeaguePointEntry {
   id           String    @id @default(cuid())
   playerId     String
+  periodId     String? // periodo bimensual; null = movimiento histórico sin asignar
   exerciseId   String? // null = ajuste manual / histórico (no se inventa ejercicio)
   activityId   String?
   exerciseName String? // nombre del ejercicio en el momento de la asignación (se conserva aunque se borre)
@@ -438,6 +451,7 @@ model LeaguePointEntry {
   player   Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   exercise Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
   activity Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  period   LeaguePeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
 
   @@unique([exerciseId, playerId])
 }
@@ -469,4 +483,51 @@ model ActivityFileView {
   activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
 
   @@unique([userId, activityId, version])
+}
+
+// Premio "Jugador del Mes" aplicado a un mes concreto. monthKey es único, de
+// modo que el premio no puede aplicarse dos veces al mismo mes.
+model MonthlyAward {
+  id             String   @id @default(cuid())
+  monthKey       String   @unique // "YYYY-MM"
+  playerId       String
+  playerName     String
+  appliedById    String
+  appliedByName  String
+  appliedAt      DateTime @default(now())
+  amountForgiven Float    @default(0)
+  fineCount      Int      @default(0)
+  note           String?
+}
+
+// Periodo bimensual de la LIGA interna (Sep-Oct, Nov-Dic, Ene-Feb, Mar-Abr, May-Jun).
+// "key" es único, de modo que el periodo nunca se crea dos veces.
+model LeaguePeriod {
+  id        String   @id @default(cuid())
+  key       String   @unique // p. ej. "2026-09_2026-10"
+  name      String // p. ej. "Septiembre-Octubre 2026"
+  startDate DateTime
+  endDate   DateTime // instante exclusivo de fin (inicio del mes siguiente)
+  closed    Boolean  @default(false)
+  closedAt  DateTime?
+  createdAt DateTime @default(now())
+
+  entries LeaguePointEntry[]
+  results LeaguePeriodResult[]
+}
+
+// Clasificación FINAL guardada al cerrar un periodo (no se recalcula sola).
+model LeaguePeriodResult {
+  id           String  @id @default(cuid())
+  periodId     String
+  playerId     String
+  playerName   String // nombre visible en el momento del cierre (respaldo)
+  position     Int
+  points       Int
+  inPunishment Boolean @default(false) // terminó en Zona de Castigo
+
+  period LeaguePeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  player Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, playerId])
 }
