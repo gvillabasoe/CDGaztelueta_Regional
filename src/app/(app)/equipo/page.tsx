@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { pendingCount } from "@/lib/queries";
+import { pendingCount, hasPendingVote } from "@/lib/queries";
 import { RosterView } from "./RosterView";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,14 @@ export default async function EquipoPage() {
   });
 
   const pending = isCoach ? await pendingCount() : 0;
+  const votePending = await hasPendingVote();
 
   return (
-    <RosterView isCoach={isCoach} players={players} pendingCount={pending} />
+    <RosterView
+      isCoach={isCoach}
+      players={players}
+      pendingCount={pending}
+      votePending={votePending}
+    />
   );
 }

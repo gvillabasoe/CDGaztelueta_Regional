@@ -13,3 +13,15 @@ export function publicName(
   const f = (fallback ?? "").trim();
   return f || "Jugador";
 }
+
+// Etiqueta de un evento de votación (partido o cena). La cena usa siempre el
+// icono de fiesta acompañado de texto, nunca solo el símbolo.
+export function eventLabel(a: {
+  type: string;
+  opponent?: string | null;
+  matchday?: number | null;
+}): string {
+  if (a.type === "DINNER") return "🎉 JORNADA NOCTURNA – CENA DE EQUIPO";
+  const jornada = a.matchday != null ? `Jornada ${a.matchday} – ` : "";
+  return jornada + (a.opponent ? `CD Gaztelueta vs ${a.opponent}` : "Partido");
+}

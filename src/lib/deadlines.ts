@@ -100,3 +100,31 @@ export function parseMadridLocal(s: string): Date | null {
   if (!m) return null;
   return madridWallClockToUtc(+m[1], +m[2], +m[3], +m[4], +m[5]);
 }
+
+// ── Estado efectivo de una votación (fuente de verdad: reloj del servidor) ──
+
+export type PollState = "PENDING" | "OPEN" | "CLOSED" | "CANCELLED";
+
+// Deriva el estado de la votación. No hay ningún campo que pueda quedar
+// desactualizado: la apertura y el cierre "ocurren" al pasar la hora.
+export function pollState(
+  poll: {
+    status: string;
+    opensAt?: Date | null;
+    closesAt: Date;
+  },
+  now: Date = new Date(),
+): PollState {
+  if (poll.status === "CANCELLED") return "CANCELLED";
+  if (poll.status === "CLOSED") return "CLOSED";
+  if (now >= poll.closesAt) return "CLOSED";
+  if (poll.opensAt && now < poll.opensAt) return "PENDING";
+  return "OPEN";
+}
+
+export const POLL_STATE_LABEL: Record<PollState, string> = {
+  PENDING: "PENDIENTE DE APERTURA",
+  OPEN: "VOTACIÓN ABIERTA",
+  CLOSED: "VOTACIÓN CERRADA",
+  CANCELLED: "VOTACIÓN ANULADA",
+};

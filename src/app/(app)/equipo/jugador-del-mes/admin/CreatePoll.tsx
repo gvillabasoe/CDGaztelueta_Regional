@@ -21,6 +21,7 @@ export function CreatePoll({
   const [matchId, setMatchId] = React.useState("");
   const [cands, setCands] = React.useState<string[]>([]);
   const [selfVote, setSelfVote] = React.useState(false);
+  const [opensAt, setOpensAt] = React.useState("");
   const [closesAt, setClosesAt] = React.useState("");
   const [needDeadline, setNeedDeadline] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -44,6 +45,7 @@ export function CreatePoll({
       activityId: matchId,
       allowSelfVote: selfVote,
       candidateIds: cands,
+      opensAt: opensAt || null,
       closesAt: closesAt || null,
     });
     setBusy(false);
@@ -55,6 +57,7 @@ export function CreatePoll({
     setOpen(false);
     setMatchId("");
     setCands([]);
+    setOpensAt("");
     setClosesAt("");
     setNeedDeadline(false);
     router.refresh();
@@ -125,7 +128,22 @@ export function CreatePoll({
 
       <div>
         <label className="label">
-          Cierre {needDeadline ? "(obligatorio)" : "(opcional · por defecto martes 23:59)"}
+          Apertura (opcional · si se deja vacío, se abre al crearla)
+        </label>
+        <input
+          type="datetime-local"
+          className="field"
+          value={opensAt}
+          onChange={(e) => setOpensAt(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-gris">
+          Hasta esa fecha y hora la votación quedará PENDIENTE DE APERTURA.
+        </p>
+      </div>
+
+      <div>
+        <label className="label">
+          Cierre {needDeadline ? "(obligatorio)" : "(sugerido: martes 23:59, editable)"}
         </label>
         <input
           type="datetime-local"

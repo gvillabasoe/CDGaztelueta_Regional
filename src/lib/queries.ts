@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import type { DocKind } from "@/lib/types";
 import { publicName } from "@/lib/profile";
+import { pollState } from "@/lib/deadlines";
 
 // Jugador asociado al usuario de la sesión (o null si es entrenador).
 export async function currentPlayer() {
@@ -222,7 +223,10 @@ export async function latestPoll() {
 // Partidos (MATCH) que aún no tienen votación (para crearla).
 export async function matchesWithoutPoll() {
   const acts = await prisma.activity.findMany({
-    where: { type: "MATCH", poll: null },
+    where: {
+      poll: null,
+      OR: [{ type: "MATCH" }, { type: "DINNER", pollEnabled: true }],
+    },
     orderBy: { date: "desc" },
     include: { calledPlayers: { select: { id: true } } },
     take: 30,
@@ -738,6 +742,7 @@ export async function pollsHistory() {
       activity: {
         select: {
           id: true,
+          type: true,
           date: true,
           opponent: true,
           matchday: true,
@@ -945,4 +950,92 @@ export async function unassignedLeagueEntries() {
     console.error("unassignedLeagueEntries", err);
     return 0;
   }
+}
+
+// ───────── Avisos de votación: ÚNICA fuente de verdad (§17, §18, §19) ─────────
+
+// Votaciones relevantes para el usuario de la sesión, con su estado personal.
+// La condición de aviso es: votación ABIERTA + el usuario puede votar + todavía
+// no tiene papeleta válida. Nada se guarda: se calcula del estado real.
+export async function myPollsStatus() {
+  const s = await getSession();
+  if (!s) return { canVote: false, items: [], pendingCount: 0 };
+
+  try {
+    // ¿Puede votar este usuario?
+    let canVote = false;
+    if (s.role === "PLAYER") {
+      const me = await prisma.player.findFirst({
+        where: { userId: s.userId, status: "ACTIVE" },
+        select: { id: true },
+      });
+      canVote = !!me;
+    } else if (s.role === "COACH") {
+      const u = await prisma.user.findUnique({
+        where: { id: s.userId },
+        select: { canVote: true },
+      });
+      canVote = !!u?.canVote;
+    }
+
+    const polls = await prisma.poll.findMany({
+      where: { status: { not: "CANCELLED" } },
+      orderBy: { activity: { date: "desc" } },
+      select: {
+        id: true,
+        status: true,
+        opensAt: true,
+        closesAt: true,
+        monthKey: true,
+        activity: {
+          select: { id: true, date: true, opponent: true, matchday: true, type: true },
+        },
+      },
+    });
+    if (polls.length === 0) return { canVote, items: [], pendingCount: 0 };
+
+    const ballots = await prisma.ballot.findMany({
+      where: {
+        voterId: s.userId,
+        excluded: false,
+        pollId: { in: polls.map((p) => p.id) },
+      },
+      select: { pollId: true },
+    });
+    const voted = new Set(ballots.map((b) => b.pollId));
+
+    const now = new Date();
+    const items = polls.map((p) => {
+      const state = pollState(p, now);
+      return {
+        pollId: p.id,
+        state,
+        monthKey: p.monthKey,
+        activityId: p.activity.id,
+        activityType: p.activity.type,
+        date: p.activity.date,
+        opponent: p.activity.opponent,
+        matchday: p.activity.matchday,
+        opensAt: p.opensAt,
+        closesAt: p.closesAt,
+        voted: voted.has(p.id),
+        // Pendiente solo si está ABIERTA, puede votar y no ha votado.
+        pending: state === "OPEN" && canVote && !voted.has(p.id),
+      };
+    });
+
+    return {
+      canVote,
+      items,
+      pendingCount: items.filter((i) => i.pending).length,
+    };
+  } catch (err) {
+    console.error("myPollsStatus", err);
+    return { canVote: false, items: [], pendingCount: 0 };
+  }
+}
+
+// Aviso general: ¿tiene el usuario alguna votación abierta sin completar?
+export async function hasPendingVote() {
+  return (await myPollsStatus()).pendingCount > 0;
 }

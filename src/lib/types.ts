@@ -56,9 +56,11 @@ export type RegisterInput = {
 };
 
 // ── Planificación (8) ─────────────────────────────────────────────
+export type ActivityKind = "TRAINING" | "MATCH" | "DINNER";
+
 export type PlanActivityInput = {
   id?: string;
-  type: "TRAINING" | "MATCH";
+  type: ActivityKind;
   date: string; // yyyy-mm-dd
   startTime: string; // HH:MM
   endTime: string | null;
@@ -67,7 +69,12 @@ export type PlanActivityInput = {
   matchday: number | null;
   callTime: string | null;
   kitLocal: boolean | null;
-  calledPlayerIds: string[]; // convocatoria (máx. 18)
+  calledPlayerIds: string[]; // convocatoria (partidos: máx. 18)
+  // Solo cena de equipo:
+  dinnerPlace: string | null;
+  afterPlace: string | null;
+  notes: string | null;
+  pollEnabled: boolean;
 };
 
 export type PlanInput = {
@@ -197,7 +204,8 @@ export type CreatePollInput = {
   activityId: string;
   allowSelfVote: boolean;
   candidateIds: string[];
-  closesAt: string | null; // datetime-local (opcional; si no, martes 23:59)
+  opensAt: string | null; // datetime-local; null = abierta al crearla
+  closesAt: string | null; // datetime-local (si no, martes 23:59 sugerido)
 };
 
 export type BallotInput = {

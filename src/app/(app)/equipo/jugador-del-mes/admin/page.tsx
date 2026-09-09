@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { matchesWithoutPoll, pollAdminData } from "@/lib/queries";
 import { formatDateShort, formatDateTime } from "@/lib/format";
+import { pollState, POLL_STATE_LABEL } from "@/lib/deadlines";
 import { CreatePoll } from "./CreatePoll";
 import { PollAdmin, type PollAdminData } from "./PollAdmin";
 import { VotePermissions } from "./VotePermissions";
@@ -51,13 +52,16 @@ export default async function AdminVotacionesPage() {
   for (const p of polls) {
     const d = await pollAdminData(p.id);
     if (!d) continue;
-    const effectiveClosed =
-      d.poll.status === "CLOSED" || now >= d.poll.closesAt;
+    const state = pollState(d.poll, now);
+    const effectiveClosed = state === "CLOSED";
     adminData.push({
       pollId: d.poll.id,
       matchLabel: `${d.poll.activity.opponent ? "vs " + d.poll.activity.opponent : "Partido"} · ${formatDateShort(d.poll.activity.date)}`,
       status: d.poll.status as "OPEN" | "CLOSED" | "CANCELLED",
+      state,
+      stateLabel: POLL_STATE_LABEL[state],
       effectiveClosed,
+      opensAtLabel: d.poll.opensAt ? formatDateTime(d.poll.opensAt) : null,
       closesAtLabel: formatDateTime(d.poll.closesAt),
       monthKey: d.poll.monthKey,
       allowSelfVote: d.poll.allowSelfVote,

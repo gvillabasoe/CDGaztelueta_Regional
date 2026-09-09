@@ -19,7 +19,7 @@ import { setPublished, deletePlan } from "@/actions/plan";
 
 export type ActivityLite = {
   id: string;
-  type: "TRAINING" | "MATCH";
+  type: "TRAINING" | "MATCH" | "DINNER";
   dayName: string;
   dateShort: string;
   startTime: string;
@@ -142,7 +142,9 @@ export function PlanList({
                       "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full " +
                       (a.type === "MATCH"
                         ? "bg-dorado/20 text-dorado"
-                        : "bg-marino/10 text-marino")
+                        : a.type === "DINNER"
+                          ? "bg-amarillo/35 text-negro"
+                          : "bg-marino/10 text-marino")
                     }
                   >
                     {a.pdfPending && (
@@ -155,6 +157,10 @@ export function PlanList({
                     )}
                     {a.type === "MATCH" ? (
                       <Trophy size={17} />
+                    ) : a.type === "DINNER" ? (
+                      <span aria-hidden className="text-base leading-none">
+                        🎉
+                      </span>
                     ) : (
                       <Dumbbell size={17} />
                     )}
@@ -165,12 +171,18 @@ export function PlanList({
                       <span
                         className={
                           "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase " +
-                          (a.type === "MATCH"
+                          (a.type === "DINNER"
+                            ? "bg-amarillo/35 text-negro"
+                            : a.type === "MATCH"
                             ? "bg-dorado/20 text-marino"
                             : "bg-marino/10 text-marino")
                         }
                       >
-                        {a.type === "MATCH" ? "Partido" : "Entreno"}
+                        {a.type === "MATCH"
+                          ? "Partido"
+                          : a.type === "DINNER"
+                            ? "Cena de equipo"
+                            : "Entreno"}
                       </span>
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gris">

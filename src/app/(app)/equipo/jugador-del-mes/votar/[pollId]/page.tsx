@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { pollById } from "@/lib/queries";
+import { pollState } from "@/lib/deadlines";
 import { VoteForm } from "./VoteForm";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,9 @@ export default async function VotarPage({
   const poll = await pollById(params.pollId);
   if (!poll) notFound();
 
-  const now = new Date();
-  const accepting = poll.status === "OPEN" && now < poll.closesAt;
-  if (!accepting) redirect("/equipo/jugador-del-mes");
+  // Solo se puede votar con la votación ABIERTA: ni antes de la apertura ni
+  // después del cierre, comprobado en el servidor.
+  if (pollState(poll) !== "OPEN") redirect("/equipo/jugador-del-mes");
 
   // Elegibilidad: jugador activo con cuenta, o entrenador con permiso de voto.
   let myPlayerId: string | null = null;

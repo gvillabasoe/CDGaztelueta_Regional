@@ -2,7 +2,11 @@ import * as React from "react";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { myFinesSummary, hasPendingPdf } from "@/lib/queries";
+import {
+  myFinesSummary,
+  hasPendingPdf,
+  hasPendingVote,
+} from "@/lib/queries";
 import { AppShell } from "@/components/AppShell";
 import { AccountNotice } from "./AccountNotice";
 
@@ -34,11 +38,14 @@ export default async function AppLayout({
   const mine = await myFinesSummary();
   // Aviso de PLANIFICACIÓN: documentos nuevos sin consultar (independiente).
   const pdfPending = await hasPendingPdf();
+  // Aviso de votación pendiente (misma lógica que en Jugador del Mes).
+  const votePending = await hasPendingVote();
   return (
     <AppShell
       roleLabel={roleLabel}
       fineDebt={mine.hasDebt}
       planPending={pdfPending}
+      votePending={votePending}
     >
       {children}
     </AppShell>

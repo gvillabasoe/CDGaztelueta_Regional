@@ -14,6 +14,7 @@ import {
   excludeBallot,
   authorizeRevote,
   castBallotOnBehalf,
+  openPollNow,
 } from "@/actions/poll";
 
 type Voter = {
@@ -28,7 +29,10 @@ export type PollAdminData = {
   pollId: string;
   matchLabel: string;
   status: "OPEN" | "CLOSED" | "CANCELLED";
+  state: "PENDING" | "OPEN" | "CLOSED" | "CANCELLED";
+  stateLabel: string;
   effectiveClosed: boolean;
+  opensAtLabel: string | null;
   closesAtLabel: string;
   monthKey: string;
   allowSelfVote: boolean;
@@ -41,10 +45,11 @@ export type PollAdminData = {
   noAccountPlayers: Opt[];
 };
 
-const STATUS: Record<string, { label: string; cls: string }> = {
-  OPEN: { label: "Abierta", cls: "bg-green-100 text-green-700" },
-  CLOSED: { label: "Cerrada", cls: "bg-gris/20 text-gris" },
-  CANCELLED: { label: "Anulada", cls: "bg-red-100 text-red-700" },
+const STATE_CLS: Record<string, string> = {
+  PENDING: "bg-amarillo/35 text-negro",
+  OPEN: "bg-green-100 text-green-700",
+  CLOSED: "bg-gris/20 text-gris",
+  CANCELLED: "bg-red-100 text-red-700",
 };
 
 export function PollAdmin({ data }: { data: PollAdminData }) {
@@ -54,10 +59,7 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
   const [month, setMonth] = React.useState(data.monthKey);
   const [msg, setMsg] = React.useState<string | null>(null);
 
-  const st =
-    data.effectiveClosed && data.status === "OPEN"
-      ? STATUS.CLOSED
-      : STATUS[data.status];
+  const stCls = STATE_CLS[data.state] ?? STATE_CLS.CLOSED;
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(true);
@@ -82,15 +84,23 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
         </p>
         <span
           className={
-            "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold " + st.cls
+            "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold " + stCls
           }
         >
-          {st.label}
+          {data.stateLabel}
         </span>
       </div>
       <p className="text-xs text-gris">
-        Mes {data.monthKey} · Cierre {data.closesAtLabel}
+        Mes {data.monthKey}
+        {data.opensAtLabel ? ` · Apertura ${data.opensAtLabel}` : ""} · Cierre{" "}
+        {data.closesAtLabel}
       </p>
+      {data.state === "PENDING" && (
+        <p className="mt-1 rounded-lg bg-beige px-3 py-2 text-xs text-negro">
+          La votación todavía no está abierta.
+          {data.opensAtLabel ? ` Se abrirá el ${data.opensAtLabel}.` : ""}
+        </p>
+      )}
       <p className="mt-1 text-sm">
         Participación:{" "}
         <span className="font-semibold text-marino">
@@ -102,6 +112,22 @@ export function PollAdmin({ data }: { data: PollAdminData }) {
       {!cancelled && (
         <>
           <div className="mt-3 flex flex-wrap gap-2">
+            {data.state === "PENDING" && (
+              <button
+                className="rounded-lg bg-dorado px-2.5 py-1.5 text-xs font-bold text-negro disabled:opacity-50"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    confirm(
+                      "¿Abrir la votación ahora? Los usuarios autorizados podrán votar de inmediato y se mantendrá la fecha de cierre configurada.",
+                    )
+                  )
+                    run(() => openPollNow(data.pollId));
+                }}
+              >
+                ABRIR VOTACIÓN AHORA
+              </button>
+            )}
             {!data.effectiveClosed && (
               <button
                 className="rounded-lg border border-gris/30 px-2.5 py-1.5 text-xs font-semibold text-negro disabled:opacity-50"

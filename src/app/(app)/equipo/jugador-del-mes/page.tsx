@@ -16,6 +16,7 @@ import {
   pollAdminData,
   publicBallots,
   awardPreview,
+  myPollsStatus,
 } from "@/lib/queries";
 import {
   formatDateLong,
@@ -25,7 +26,10 @@ import {
 } from "@/lib/format";
 import { Avatar } from "@/components/Avatar";
 import { PublicVotes } from "./PublicVotes";
+import { eventLabel } from "@/lib/profile";
 import { AwardPanel, type AwardData } from "./AwardPanel";
+import { PendingPolls, type PollItem } from "./PendingPolls";
+import { pollState, POLL_STATE_LABEL } from "@/lib/deadlines";
 import { MonthSelect } from "./MonthSelect";
 import { AutoRefresh } from "./AutoRefresh";
 
@@ -60,7 +64,23 @@ export default async function JugadorDelMesPage({
   const classification = await monthlyClassification(monthKey);
   const winners = await winnersHistory();
 
-  const openNow = !!poll && poll.status === "OPEN" && now < poll.closesAt;
+  const openNow = !!poll && pollState(poll, now) === "OPEN";
+
+  // Estado personal de todas las votaciones (misma fuente que el punto rojo).
+  const mine = await myPollsStatus();
+  const pollItems: PollItem[] = mine.items.map((i) => ({
+    pollId: i.pollId,
+    state: i.state,
+    label: eventLabel({
+      type: i.activityType,
+      opponent: i.opponent,
+      matchday: i.matchday,
+    }),
+    dateLabel: formatDateShort(i.date),
+    opensAtLabel: i.opensAt ? formatDateTime(i.opensAt) : null,
+    voted: i.voted,
+    pending: i.pending,
+  }));
 
   // Premio del mes seleccionado (la aplicación es solo del entrenador).
   let award: AwardData | null = null;
@@ -92,9 +112,10 @@ export default async function JugadorDelMesPage({
   let pollBlock: React.ReactNode = null;
   let publicList: React.ComponentProps<typeof PublicVotes>["ballots"] = [];
   if (poll) {
-    const cancelled = poll.status === "CANCELLED";
-    const accepting = poll.status === "OPEN" && now < poll.closesAt;
-    const closed = !cancelled && !accepting;
+    const state = pollState(poll, now);
+    const cancelled = state === "CANCELLED";
+    const accepting = state === "OPEN";
+    const closed = state === "CLOSED";
     const nameById = new Map(
       poll.candidates.map((c) => [c.id, `${c.firstName} ${c.lastName}`]),
     );
@@ -216,6 +237,17 @@ export default async function JugadorDelMesPage({
           </p>
         </div>
         <div className="space-y-4 p-4 text-sm">
+          <p className="text-xs font-bold uppercase tracking-wide text-marino">
+            Estado: {POLL_STATE_LABEL[state]}
+          </p>
+          {state === "PENDING" && (
+            <p className="rounded-lg bg-beige px-3 py-2 text-xs text-negro">
+              La votación todavía no está abierta.
+              {poll.opensAt
+                ? ` Se abrirá el ${formatDateTime(poll.opensAt)}.`
+                : ""}
+            </p>
+          )}
           <p className="font-medium capitalize text-negro">
             {poll.activity.opponent
               ? `CD Gaztelueta vs ${poll.activity.opponent}`
@@ -297,6 +329,8 @@ export default async function JugadorDelMesPage({
       </h1>
 
       {pollBlock}
+
+      <PendingPolls items={pollItems} canVote={mine.canVote} />
 
       {/* Premio del mes: visible para jugadores y entrenadores */}
       <div className="rounded-xl border border-[#C9A227] bg-[#F7E7A6] p-3">

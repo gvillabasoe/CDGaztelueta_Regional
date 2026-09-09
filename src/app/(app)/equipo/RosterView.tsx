@@ -23,10 +23,12 @@ export function RosterView({
   isCoach,
   players,
   pendingCount = 0,
+  votePending = false,
 }: {
   isCoach: boolean;
   players: P[];
   pendingCount?: number;
+  votePending?: boolean;
 }) {
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState<Sort>("name");
@@ -75,10 +77,25 @@ export function RosterView({
         className="card flex items-center justify-between p-3 transition hover:bg-beige/60"
       >
         <span className="flex items-center gap-2 text-sm font-medium text-negro">
-          <Star size={18} className="text-dorado" />
+          <span className="relative flex items-center">
+            <Star size={18} className="text-dorado" />
+            {votePending && (
+              <span
+                role="status"
+                aria-label="Tienes una votación pendiente de completar"
+                className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-blanco"
+              />
+            )}
+          </span>
           Jugador del Mes
         </span>
-        <ChevronRight size={18} className="text-gris" />
+        {votePending ? (
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+            Votación pendiente
+          </span>
+        ) : (
+          <ChevronRight size={18} className="text-gris" />
+        )}
       </Link>
 
       {isCoach && (

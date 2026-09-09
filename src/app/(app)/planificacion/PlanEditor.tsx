@@ -20,7 +20,7 @@ import type { PlanActivityInput, PlanInput, PlayerLite } from "@/lib/types";
 type Draft = {
   key: string;
   id?: string;
-  type: "TRAINING" | "MATCH";
+  type: "TRAINING" | "MATCH" | "DINNER";
   date: string;
   startTime: string;
   endTime: string;
@@ -30,6 +30,10 @@ type Draft = {
   callTime: string;
   kitLocal: boolean;
   calledPlayerIds: string[];
+  dinnerPlace: string;
+  afterPlace: string;
+  notes: string;
+  pollEnabled: boolean;
 };
 
 let counter = 0;
@@ -86,14 +90,15 @@ export function PlanEditor({
     return monday ? toIsoDate(monday) : "";
   }
 
-  function add(type: "TRAINING" | "MATCH") {
+  function add(type: "TRAINING" | "MATCH" | "DINNER") {
     setDrafts((d) => [
       ...d,
       {
         key: uid(),
         type,
         date: defaultDate(),
-        startTime: type === "MATCH" ? "17:00" : "20:30",
+        startTime:
+          type === "MATCH" ? "17:00" : type === "DINNER" ? "21:30" : "20:30",
         endTime: "",
         place: "",
         opponent: "",
@@ -101,6 +106,10 @@ export function PlanEditor({
         callTime: "",
         kitLocal: true,
         calledPlayerIds: [],
+        dinnerPlace: "",
+        afterPlace: "",
+        notes: "",
+        pollEnabled: false,
       },
     ]);
   }
@@ -138,6 +147,10 @@ export function PlanEditor({
         setError("Todas las actividades necesitan una fecha.");
         return;
       }
+      if (d.type === "DINNER" && !d.dinnerPlace.trim()) {
+        setMsg("Indica el lugar de la cena.");
+        return;
+      }
       if (d.type === "MATCH" && d.calledPlayerIds.length > 18) {
         setError("La convocatoria no puede superar los 18 jugadores.");
         return;
@@ -159,9 +172,15 @@ export function PlanEditor({
           d.type === "MATCH" && d.matchday.trim()
             ? parseInt(d.matchday, 10)
             : null,
-        callTime: d.type === "MATCH" ? d.callTime || null : null,
+        callTime:
+          d.type === "MATCH" || d.type === "DINNER" ? d.callTime || null : null,
         kitLocal: d.type === "MATCH" ? d.kitLocal : null,
-        calledPlayerIds: d.type === "MATCH" ? d.calledPlayerIds : [],
+        calledPlayerIds:
+          d.type === "MATCH" || d.type === "DINNER" ? d.calledPlayerIds : [],
+        dinnerPlace: d.type === "DINNER" ? d.dinnerPlace.trim() || null : null,
+        afterPlace: d.type === "DINNER" ? d.afterPlace.trim() || null : null,
+        notes: d.type === "DINNER" ? d.notes.trim() || null : null,
+        pollEnabled: d.type === "DINNER" ? d.pollEnabled : false,
       })),
     };
 
@@ -208,15 +227,23 @@ export function PlanEditor({
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold " +
                 (d.type === "MATCH"
                   ? "bg-dorado/20 text-marino"
-                  : "bg-marino/10 text-marino")
+                  : d.type === "DINNER"
+                    ? "bg-amarillo/35 text-negro"
+                    : "bg-marino/10 text-marino")
               }
             >
               {d.type === "MATCH" ? (
                 <Trophy size={13} />
+              ) : d.type === "DINNER" ? (
+                <span aria-hidden>🎉</span>
               ) : (
                 <Dumbbell size={13} />
               )}
-              {d.type === "MATCH" ? "Partido" : "Entrenamiento"}
+              {d.type === "MATCH"
+                ? "Partido"
+                : d.type === "DINNER"
+                  ? "Cena de equipo"
+                  : "Entrenamiento"}
             </span>
             <button
               onClick={() => remove(d.key)}
@@ -239,7 +266,11 @@ export function PlanEditor({
             </div>
             <div>
               <label className="label">
-                {d.type === "MATCH" ? "Hora del partido" : "Hora inicio"}
+                {d.type === "MATCH"
+                  ? "Hora del partido"
+                  : d.type === "DINNER"
+                    ? "Hora de convocatoria"
+                    : "Hora inicio"}
               </label>
               <input
                 type="time"
@@ -269,6 +300,62 @@ export function PlanEditor({
                 />
               </div>
             )}
+            {d.type === "DINNER" ? (
+              <>
+                <div className="col-span-2">
+                  <p className="chip bg-amarillo/35 text-[11px] font-bold text-negro">
+                    <span aria-hidden>🎉</span> JORNADA NOCTURNA
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Lugar de la cena *</label>
+                  <input
+                    className="field"
+                    placeholder="Restaurante, sidrería…"
+                    value={d.dinnerPlace}
+                    onChange={(e) =>
+                      patch(d.key, { dinnerPlace: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="label">
+                    Después de la cena (opcional)
+                  </label>
+                  <input
+                    className="field"
+                    placeholder="Local, discoteca, zona…"
+                    value={d.afterPlace}
+                    onChange={(e) =>
+                      patch(d.key, { afterPlace: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Observaciones (opcional)</label>
+                  <textarea
+                    className="field"
+                    rows={2}
+                    value={d.notes}
+                    onChange={(e) => patch(d.key, { notes: e.target.value })}
+                  />
+                </div>
+                <div className="col-span-2 flex items-center justify-between rounded-xl bg-beige px-3 py-2.5">
+                  <span className="pr-2 text-sm font-medium text-negro">
+                    Permitir votación para Jugador del Mes
+                  </span>
+                  <Switch
+                    checked={d.pollEnabled}
+                    onChange={(v) => patch(d.key, { pollEnabled: v })}
+                    label="Permitir votación"
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-gris">
+                  Activarlo no abre ninguna votación: después habrá que crearla
+                  y programarla desde Jugador del Mes.
+                </p>
+              </>
+            ) : (
             <div className="col-span-2">
               <label className="label">
                 {d.type === "MATCH" ? "Campo / instalación" : "Campo / lugar"}
@@ -279,6 +366,7 @@ export function PlanEditor({
                 onChange={(e) => patch(d.key, { place: e.target.value })}
               />
             </div>
+            )}
 
             {d.type === "MATCH" && (
               <>
@@ -377,6 +465,9 @@ export function PlanEditor({
       <div className="grid grid-cols-2 gap-2">
         <button className="btn-ghost" onClick={() => add("TRAINING")}>
           <Plus size={16} /> Entrenamiento
+        </button>
+        <button className="btn-ghost" onClick={() => add("DINNER")}>
+          <span aria-hidden>🎉</span> Cena de equipo
         </button>
         <button className="btn-ghost" onClick={() => add("MATCH")}>
           <Plus size={16} /> Partido

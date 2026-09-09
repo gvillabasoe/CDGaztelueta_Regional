@@ -39,7 +39,12 @@ export default async function ActivityPage({
   if (!isCoach && !activity.plan.published) redirect("/planificacion");
 
   const me = isCoach ? null : await currentPlayer();
-  const myPlayerId = me?.id ?? null;
+  // Clave del miembro que corresponde al usuario: jugador o cuerpo técnico.
+  const myPlayerId = me
+    ? `p:${me.id}`
+    : session
+      ? `s:${session.userId}`
+      : null;
 
   const roster = await prisma.player.findMany({
     where: { status: "ACTIVE" },
@@ -75,11 +80,20 @@ export default async function ActivityPage({
     });
   }
 
-  const attMap = new Map(activity.attendance.map((a) => [a.playerId, a]));
+  const attMap = new Map(
+    activity.attendance
+      .filter((a) => a.playerId)
+      .map((a) => [a.playerId as string, a]),
+  );
+  const staffAttMap = new Map(
+    activity.attendance
+      .filter((a) => a.staffUserId)
+      .map((a) => [a.staffUserId as string, a]),
+  );
   const attendancePlayers = roster.map((p) => {
     const r = attMap.get(p.id);
     return {
-      id: p.id,
+      id: `p:${p.id}`,
       firstName: p.firstName,
       lastName: p.lastName,
       photo: p.photo,
@@ -93,7 +107,41 @@ export default async function ActivityPage({
     };
   });
 
+  // En la cena de equipo la asistencia incluye al cuerpo técnico convocado.
+  if (isDinner) {
+    const staff = await prisma.user.findMany({
+      where: { role: "COACH" },
+      orderBy: [{ displayName: "asc" }, { username: "asc" }],
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        nickname: true,
+        photo: true,
+      },
+    });
+    for (const u of staff) {
+      const r = staffAttMap.get(u.id);
+      attendancePlayers.push({
+        id: `s:${u.id}`,
+        firstName:
+          u.nickname?.trim() || u.displayName?.trim() || u.username,
+        lastName: "",
+        photo: u.photo,
+        status: (r?.status ?? "GOING") as "GOING" | "NOT_GOING",
+        reason: (r?.reason ?? null) as string | null,
+        explanation: r?.explanation ?? null,
+        outOfTime: r?.outOfTime ?? false,
+        modifiedByName: r?.modifiedByName ?? null,
+        modifiedAtLabel: r?.modifiedAt
+          ? formatDateTimeShort(r.modifiedAt)
+          : null,
+      });
+    }
+  }
+
   const isMatch = activity.type === "MATCH";
+  const isDinner = activity.type === "DINNER";
   const attendanceClosed =
     activity.type === "TRAINING" && isTrainingAttendanceClosed(activity.date);
   const calledIds = new Set(activity.calledPlayers.map((p) => p.id));
@@ -191,7 +239,58 @@ export default async function ActivityPage({
         </section>
       )}
 
+      {isDinner && (
+        <section className="card p-4">
+          <p className="chip mb-2 bg-amarillo/35 text-[11px] font-bold text-negro">
+            <span aria-hidden>🎉</span> JORNADA NOCTURNA
+          </p>
+          <h2 className="font-display text-lg font-semibold text-negro">
+            <span aria-hidden>🎉</span>{" "}
+            <span className="sr-only">Cena de equipo:</span>
+            Cena de equipo
+          </h2>
+          <dl className="mt-2 space-y-1 text-sm">
+            {activity.callTime && (
+              <div className="flex gap-2">
+                <dt className="text-gris">Hora de convocatoria:</dt>
+                <dd className="font-medium text-negro">{activity.callTime}</dd>
+              </div>
+            )}
+            {activity.dinnerPlace && (
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-gris">Lugar de la cena:</dt>
+                <dd className="break-words font-medium text-negro">
+                  {activity.dinnerPlace}
+                </dd>
+              </div>
+            )}
+            {activity.afterPlace && (
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-gris">Después de la cena:</dt>
+                <dd className="break-words font-medium text-negro">
+                  {activity.afterPlace}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {activity.notes && (
+            <p className="mt-2 whitespace-pre-line rounded-lg bg-beige px-3 py-2 text-sm text-negro">
+              {activity.notes}
+            </p>
+          )}
+          {activity.pollEnabled && (
+            <p className="mt-2 inline-block rounded-lg bg-amarillo/30 px-2.5 py-1 text-[11px] font-bold text-negro">
+              ⭐ EVENTO PUNTUABLE PARA JUGADOR DEL MES
+            </p>
+          )}
+          <p className="mt-2 text-xs text-gris">
+            Convocatoria: TODOS CONVOCADOS (plantilla y cuerpo técnico).
+          </p>
+        </section>
+      )}
+
       {/* Documento (PDF): disponible en entrenamientos Y partidos */}
+      {!isDinner && (
       <section className="card p-4">
         <div className="mb-3 flex items-center gap-2">
           <FileText size={16} className="text-marino" />
@@ -212,6 +311,7 @@ export default async function ActivityPage({
           pdfPending={pdfPendingHere}
         />
       </section>
+      )}
 
       {/* Ejercicios: solo entrenamiento */}
       {!isMatch && (

@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { pollsHistory } from "@/lib/queries";
 import { formatDateShort } from "@/lib/format";
+import { eventLabel } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -59,14 +60,7 @@ export default async function HistorialVotosPage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-negro">
-                      {p.activity.matchday != null
-                        ? `Jornada ${p.activity.matchday} — `
-                        : ""}
-                      {p.activity.kitLocal === false && p.activity.opponent
-                        ? `${p.activity.opponent} vs CD Gaztelueta`
-                        : p.activity.opponent
-                          ? `CD Gaztelueta vs ${p.activity.opponent}`
-                          : "Partido"}
+                      {eventLabel(p.activity)}
                     </p>
                     <p className="text-xs text-gris">
                       {formatDateShort(p.activity.date)} ·{" "}

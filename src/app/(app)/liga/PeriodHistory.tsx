@@ -37,46 +37,38 @@ export function PeriodHistory({
             key={r.playerId}
             className={
               "flex items-center gap-3 rounded-2xl p-3 " +
-              (r.inPunishment
-                ? "border border-red-300 bg-red-50 shadow-card"
-                : "card")
+              // Se conserva el dato de Zona de Castigo, pero sin fondo rojo.
+              (r.position <= 2 ? "border border-gris/25 bg-beige/50" : "card")
             }
           >
             <div className="flex w-9 shrink-0 flex-col items-center">
               <span
                 className={
-                  "text-sm font-bold " +
-                  (r.inPunishment ? "text-red-700" : "text-gris")
+                  "text-sm font-bold text-gris"
                 }
               >
                 {r.position}
               </span>
-              {r.inPunishment && (
-                <span aria-hidden className="text-[13px] leading-none">
-                  ⚠
-                </span>
-              )}
+
             </div>
             <Avatar photo={r.photo} name={r.name} size={40} />
             <div className="min-w-0 flex-1">
               <p
                 className={
-                  "truncate font-semibold " +
-                  (r.inPunishment ? "text-red-900" : "text-negro")
+                  "truncate font-semibold text-negro"
                 }
               >
                 {r.name}
               </p>
               {r.inPunishment && (
-                <p className="text-[11px] font-bold uppercase text-red-700">
+                <p className="text-[11px] font-bold uppercase text-gris">
                   Zona de castigo
                 </p>
               )}
             </div>
             <span
               className={
-                "font-display text-xl font-bold " +
-                (r.inPunishment ? "text-red-800" : "text-marino")
+                "font-display text-xl font-bold text-marino"
               }
             >
               {r.points}
@@ -89,8 +81,8 @@ export function PeriodHistory({
       </div>
 
       {/* Aviso final del periodo */}
-      <div className="rounded-xl border border-red-200 bg-red-50 p-3">
-        <p className="flex items-center gap-1.5 text-sm font-bold text-red-800">
+      <div className="rounded-xl border border-dorado/50 bg-beige/60 p-3">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-negro">
           <span aria-hidden>⚠</span> TORTILLAS Y PINCHOS —{" "}
           <span className="uppercase">{name}</span>
         </p>
