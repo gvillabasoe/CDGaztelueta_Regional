@@ -29,6 +29,7 @@ enum CardType {
 enum ActivityType {
   TRAINING
   MATCH
+  DINNER // Cena de equipo ("JORNADA NOCTURNA")
 }
 
 enum AttendanceStatus {
@@ -80,6 +81,8 @@ model User {
   canManageFinePayments Boolean @default(false)
   staffFines    Fine[]   @relation("StaffFines")
   fileViews     ActivityFileView[]
+  calledFor     Activity[]         @relation("StaffCallup")
+  attendance    Attendance[]       @relation("StaffAttendance")
   photo         String? // foto de perfil propia (data URL) — cuerpo técnico
   nickname      String? // mote propio — cuerpo técnico
 }
@@ -191,6 +194,11 @@ model Activity {
   matchday   Int?
   callTime   String? // hora de convocatoria
   kitLocal   Boolean? // equipación: true=Local, false=Visitante
+  // Solo cena de equipo:
+  dinnerPlace String? // lugar de la cena
+  afterPlace  String? // lugar al que se sale después (opcional)
+  notes       String? // observaciones (opcional)
+  pollEnabled Boolean @default(false) // permitir votación de Jugador del Mes
   // Documento del entrenamiento (8.4.1):
   fileData   Bytes?
   fileName   String?
@@ -204,7 +212,8 @@ model Activity {
   plan          WeeklyPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   exercises     Exercise[]
   attendance    Attendance[]
-  calledPlayers Player[]        @relation("Callup") // convocatoria (máx. 18)
+  calledPlayers Player[]        @relation("Callup") // convocatoria (partidos: máx. 18)
+  calledStaff   User[]          @relation("StaffCallup") // convocatoria del cuerpo técnico (cenas)
   trainingRecord TrainingRecord?
   matchRecord    MatchRecord?
   poll           Poll?
@@ -248,10 +257,13 @@ model ExerciseRating {
 
 // Confirmación de asistencia por actividad (8.5).
 // Si no existe fila para un jugador, se considera GOING (verde) por defecto.
+// Una asistencia corresponde a UNA persona: un jugador (playerId) o un miembro
+// del cuerpo técnico (staffUserId). Mismos estados y mismos bloques visuales.
 model Attendance {
   id          String           @id @default(cuid())
   activityId  String
-  playerId    String
+  playerId    String?
+  staffUserId String?
   status      AttendanceStatus @default(GOING)
   reason      AbsenceReason?
   explanation   String?
@@ -261,9 +273,11 @@ model Attendance {
   modifiedAt    DateTime?
   outOfTime     Boolean          @default(false) // cambio realizado fuera de plazo (solo entrenador)
   activity    Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  player      Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player      Player?          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  staffUser   User?            @relation("StaffAttendance", fields: [staffUserId], references: [id], onDelete: Cascade)
 
   @@unique([activityId, playerId])
+  @@unique([activityId, staffUserId])
 }
 
 // ── Registro posterior de entrenamiento (8.6) ─────────────────────
@@ -394,7 +408,13 @@ model Poll {
   activityId   String     @unique
   activity     Activity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
   monthKey     String // "YYYY-MM": mes al que se asignan los puntos (fecha del partido)
-  closesAt     DateTime // cierre (por defecto martes 23:59 Europe/Madrid)
+  // Programación: hasta opensAt la votación está PENDIENTE DE APERTURA. El
+  // estado se deriva del reloj del SERVIDOR, así que la apertura y el cierre
+  // automáticos son idempotentes por construcción (no hay proceso que repetir).
+  opensAt      DateTime? // apertura programada (null = abierta desde su creación)
+  openedAt     DateTime? // apertura real (automática o manual)
+  closedAt     DateTime? // cierre real
+  closesAt     DateTime // cierre programado
   status       PollStatus @default(OPEN)
   allowSelfVote Boolean   @default(false)
   createdAt    DateTime   @default(now())
