@@ -6,18 +6,24 @@ export function AppShell({
   roleLabel,
   fineDebt = false,
   planPending = false,
+  votePending = false,
   children,
 }: {
   roleLabel: string;
   fineDebt?: boolean;
   planPending?: boolean;
+  votePending?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <>
       <AppHeader roleLabel={roleLabel} />
       <main className="flex-1 overflow-y-auto px-4 pb-8 pt-4">{children}</main>
-      <BottomNav fineDebt={fineDebt} planPending={planPending} />
+      <BottomNav
+          fineDebt={fineDebt}
+          planPending={planPending}
+          votePending={votePending}
+        />
     </>
   );
 }

@@ -6,6 +6,7 @@ import {
   matchMonthKey,
   defaultPollClose,
   parseMadridLocal,
+  pollState,
 } from "@/lib/deadlines";
 import { revalidatePath } from "next/cache";
 import type { CreatePollInput, BallotInput } from "@/lib/types";
@@ -42,8 +43,19 @@ export async function createPoll(input: CreatePollInput) {
     where: { id: input.activityId },
     include: { poll: { select: { id: true } } },
   });
-  if (!activity || activity.type !== "MATCH")
-    return { ok: false as const, error: "La votación debe vincularse a un partido." };
+  if (!activity)
+    return { ok: false as const, error: "Actividad no encontrada." };
+  // Partidos y cenas con la votación habilitada (§30). No se crea ningún
+  // partido ficticio: la votación se vincula a la actividad real.
+  const allowed =
+    activity.type === "MATCH" ||
+    (activity.type === "DINNER" && activity.pollEnabled);
+  if (!allowed)
+    return {
+      ok: false as const,
+      error:
+        "La votación debe vincularse a un partido, o a una cena con la votación habilitada.",
+    };
   if (activity.poll)
     return { ok: false as const, error: "Ese partido ya tiene una votación." };
 
@@ -81,10 +93,27 @@ export async function createPoll(input: CreatePollInput) {
       };
   }
 
+  // Apertura programada (opcional). Si no se indica, la votación queda abierta
+  // desde su creación, como hasta ahora.
+  let opensAt: Date | null = null;
+  if (input.opensAt) {
+    const parsed = parseMadridLocal(input.opensAt);
+    if (!parsed)
+      return { ok: false as const, error: "Fecha de apertura no válida." };
+    opensAt = parsed;
+  }
+  if (opensAt && closesAt <= opensAt)
+    return {
+      ok: false as const,
+      error: "El cierre debe ser posterior a la apertura.",
+    };
+
   await prisma.poll.create({
     data: {
       activityId: activity.id,
       monthKey: matchMonthKey(activity.date),
+      opensAt,
+      openedAt: opensAt ? null : new Date(),
       closesAt,
       status: "OPEN",
       allowSelfVote: input.allowSelfVote,
@@ -124,10 +153,15 @@ export async function castBallot(input: BallotInput) {
     include: { candidates: { select: { id: true } } },
   });
   if (!poll) return { ok: false as const, error: "Votación no encontrada." };
-  if (poll.status === "CANCELLED")
+  const state = pollState(poll);
+  if (state === "CANCELLED")
     return { ok: false as const, error: "La votación está anulada." };
-  const now = new Date();
-  if (poll.status === "CLOSED" || now >= poll.closesAt)
+  if (state === "PENDING")
+    return {
+      ok: false as const,
+      error: "La votación todavía no está abierta.",
+    };
+  if (state === "CLOSED")
     return { ok: false as const, error: "La votación de este partido ha finalizado." };
 
   const { firstId, secondId, thirdId } = input;
@@ -164,9 +198,11 @@ export async function castBallot(input: BallotInput) {
 
 export async function closePollNow(pollId: string) {
   if (!(await coach())) return { ok: false as const, error: "No autorizado." };
+  // Cerrar SOLO cambia el estado: los puntos se agregan en vivo desde las
+  // papeletas, así que nunca se vuelven a sumar ni se duplican.
   const poll = await prisma.poll.update({
     where: { id: pollId },
-    data: { status: "CLOSED" },
+    data: { status: "CLOSED", closedAt: new Date() },
     select: { activityId: true },
   });
   refresh(poll.activityId);
@@ -181,7 +217,7 @@ export async function extendPoll(pollId: string, closesAt: string) {
     return { ok: false as const, error: "La fecha debe ser futura." };
   const poll = await prisma.poll.update({
     where: { id: pollId },
-    data: { closesAt: d, status: "OPEN" },
+    data: { closesAt: d, status: "OPEN", closedAt: null },
     select: { activityId: true },
   });
   refresh(poll.activityId);
@@ -273,10 +309,12 @@ export async function castBallotOnBehalf(
     include: { candidates: { select: { id: true } } },
   });
   if (!poll) return { ok: false as const, error: "Votación no encontrada." };
-  if (poll.status === "CANCELLED")
+  const obhState = pollState(poll);
+  if (obhState === "CANCELLED")
     return { ok: false as const, error: "La votación está anulada." };
-  const now = new Date();
-  if (poll.status === "CLOSED" || now >= poll.closesAt)
+  if (obhState === "PENDING")
+    return { ok: false as const, error: "La votación todavía no está abierta." };
+  if (obhState === "CLOSED")
     return { ok: false as const, error: "La votación de este partido ha finalizado." };
 
   const player = await prisma.player.findUnique({
@@ -335,5 +373,45 @@ export async function setCanVote(userId: string, allow: boolean) {
   if (!s) return { ok: false as const, error: "No autorizado." };
   await prisma.user.update({ where: { id: userId }, data: { canVote: allow } });
   revalidatePath("/equipo/jugador-del-mes/admin");
+  return { ok: true as const };
+}
+
+// ABRIR VOTACIÓN AHORA: adelanta la apertura de una votación pendiente.
+// Solo entrenadores; una llamada de un jugador nunca puede abrirla.
+// Idempotente: si ya está abierta, no cambia nada.
+export async function openPollNow(pollId: string) {
+  const s = await coach();
+  if (!s) return { ok: false as const, error: "No autorizado." };
+
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    select: {
+      activityId: true,
+      status: true,
+      opensAt: true,
+      closesAt: true,
+      openedAt: true,
+    },
+  });
+  if (!poll) return { ok: false as const, error: "Votación no encontrada." };
+
+  const state = pollState(poll);
+  if (state === "CANCELLED")
+    return { ok: false as const, error: "La votación está anulada." };
+  if (state === "CLOSED")
+    return {
+      ok: false as const,
+      error: "La votación ya ha finalizado. Amplía primero la fecha de cierre.",
+    };
+  if (state === "OPEN") return { ok: true as const }; // ya estaba abierta
+
+  const now = new Date();
+  // Se conserva la fecha de CIERRE configurada y se registra la apertura real.
+  await prisma.poll.update({
+    where: { id: pollId },
+    data: { opensAt: now, openedAt: poll.openedAt ?? now },
+  });
+  await logVote(s.userId, s.username, pollId, "open_now");
+  refresh(poll.activityId);
   return { ok: true as const };
 }

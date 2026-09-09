@@ -27,7 +27,7 @@ const REASONS: Reason[] = [
 
 async function apply(
   activityId: string,
-  playerId: string,
+  who: { playerId: string } | { staffUserId: string },
   status: Status,
   reason: Reason | null,
   explanation: string | null,
@@ -54,11 +54,24 @@ async function apply(
     modifiedAt: new Date(),
     outOfTime: audit.outOfTime,
   };
-  await prisma.attendance.upsert({
-    where: { activityId_playerId: { activityId, playerId } },
-    create: { activityId, playerId, ...data },
-    update: data,
-  });
+  if ("playerId" in who) {
+    await prisma.attendance.upsert({
+      where: { activityId_playerId: { activityId, playerId: who.playerId } },
+      create: { activityId, playerId: who.playerId, ...data },
+      update: data,
+    });
+  } else {
+    await prisma.attendance.upsert({
+      where: {
+        activityId_staffUserId: {
+          activityId,
+          staffUserId: who.staffUserId,
+        },
+      },
+      create: { activityId, staffUserId: who.staffUserId, ...data },
+      update: data,
+    });
+  }
   revalidatePath(`/planificacion/actividad/${activityId}`);
   revalidatePath("/planificacion");
   return { ok: true as const };
@@ -73,11 +86,7 @@ export async function setMyAttendance(
   explanation: string | null,
 ) {
   const s = await getSession();
-  if (!s || s.role !== "PLAYER")
-    return { ok: false as const, error: "No autorizado." };
-  const player = await prisma.player.findFirst({ where: { userId: s.userId } });
-  if (!player)
-    return { ok: false as const, error: "No se ha encontrado el jugador." };
+  if (!s) return { ok: false as const, error: "No autorizado." };
 
   const activity = await prisma.activity.findUnique({
     where: { id: activityId },
@@ -86,13 +95,29 @@ export async function setMyAttendance(
   if (!activity)
     return { ok: false as const, error: "Actividad no encontrada." };
 
+  // Cada usuario responde SOLO por sí mismo. En las cenas también responde el
+  // cuerpo técnico; el plazo de las 14:00 sigue siendo exclusivo de los
+  // entrenamientos (a las cenas no se les impone ninguna hora límite).
+  let who: { playerId: string } | { staffUserId: string };
+  if (s.role === "PLAYER") {
+    const player = await prisma.player.findFirst({
+      where: { userId: s.userId },
+      select: { id: true },
+    });
+    if (!player)
+      return { ok: false as const, error: "No se ha encontrado el jugador." };
+    who = { playerId: player.id };
+  } else {
+    who = { staffUserId: s.userId };
+  }
+
   if (activity.type === "TRAINING" && isTrainingAttendanceClosed(activity.date))
     return {
       ok: false as const,
       error: "El plazo para modificar la asistencia ha finalizado.",
     };
 
-  return apply(activityId, player.id, status, reason, explanation, {
+  return apply(activityId, who, status, reason, explanation, {
     byId: s.userId,
     byName: s.username,
     outOfTime: false,
@@ -103,7 +128,7 @@ export async function setMyAttendance(
 // momento; si es un entrenamiento y el plazo ya venció, se marca "fuera de plazo".
 export async function setPlayerAttendance(
   activityId: string,
-  playerId: string,
+  memberKey: string, // "p:<playerId>" o "s:<userId>" (también admite un playerId)
   status: Status,
   reason: Reason | null,
   explanation: string | null,
@@ -122,7 +147,11 @@ export async function setPlayerAttendance(
   const outOfTime =
     activity.type === "TRAINING" && isTrainingAttendanceClosed(activity.date);
 
-  return apply(activityId, playerId, status, reason, explanation, {
+  const who = memberKey.startsWith("s:")
+    ? { staffUserId: memberKey.slice(2) }
+    : { playerId: memberKey.startsWith("p:") ? memberKey.slice(2) : memberKey };
+
+  return apply(activityId, who, status, reason, explanation, {
     byId: s.userId,
     byName: s.username,
     outOfTime,

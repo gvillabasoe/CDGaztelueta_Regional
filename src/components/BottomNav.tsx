@@ -27,9 +27,11 @@ const ITEMS: Item[] = [
 export function BottomNav({
   fineDebt = false,
   planPending = false,
+  votePending = false,
 }: {
   fineDebt?: boolean;
   planPending?: boolean;
+  votePending?: boolean;
 }) {
   const pathname = usePathname();
   return (
@@ -59,6 +61,17 @@ export function BottomNav({
                       role="status"
                       aria-label="Tienes multas pendientes"
                       title="Tienes multas pendientes"
+                      className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-blanco"
+                    />
+                  )}
+                  {/* Aviso personal de votación: hay una votación abierta que
+                      este usuario todavía no ha completado. Lógica
+                      independiente de multas y de documentos. */}
+                  {href === "/equipo" && votePending && (
+                    <span
+                      role="status"
+                      aria-label="Tienes una votación pendiente de completar"
+                      title="Tienes una votación pendiente de completar"
                       className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-blanco"
                     />
                   )}
