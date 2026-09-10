@@ -66,6 +66,7 @@ export async function savePlan(input: PlanInput) {
       error: "Ya existe una planificación para esa semana. Edítala desde la lista.",
     };
 
+  try {
   await prisma.weeklyPlan.create({
     data: {
       weekStart: monday,
@@ -85,6 +86,13 @@ export async function savePlan(input: PlanInput) {
   });
   revalidatePath("/planificacion");
   return { ok: true as const };
+  } catch (e) {
+    console.error("savePlan", e);
+    return {
+      ok: false as const,
+      error: "No se han podido guardar los cambios. Inténtalo de nuevo.",
+    };
+  }
 }
 
 export async function updatePlan(planId: string, input: PlanInput) {
@@ -109,6 +117,7 @@ export async function updatePlan(planId: string, input: PlanInput) {
   if (!current)
     return { ok: false as const, error: "La planificación no existe." };
 
+  try {
   await prisma.$transaction(async (tx) => {
     await tx.weeklyPlan.update({
       where: { id: planId },
@@ -168,8 +177,23 @@ export async function updatePlan(planId: string, input: PlanInput) {
       }
     }
   });
+
+  // Los jugadores deben ver los cambios sin reconstruir nada: se revalida la
+  // lista y el detalle de cada actividad afectada.
   revalidatePath("/planificacion");
+  revalidatePath(`/planificacion/${planId}`);
+  for (const a of input.activities)
+    if (a.id) revalidatePath(`/planificacion/actividad/${a.id}`);
   return { ok: true as const };
+  } catch (e) {
+    // Sin excepciones hacia el cliente: error controlado para que el formulario
+    // termine su estado de carga, conserve los datos y permita reintentar.
+    console.error("updatePlan", planId, e);
+    return {
+      ok: false as const,
+      error: "No se han podido guardar los cambios. Inténtalo de nuevo.",
+    };
+  }
 }
 
 export async function deleteActivity(activityId: string) {
