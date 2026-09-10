@@ -45,6 +45,12 @@ export default async function ActivityPage({
   // Los jugadores solo ven actividades de planificaciones publicadas.
   if (!isCoach && !activity.plan.published) redirect("/planificacion");
 
+  // Tipo de actividad: se declara ANTES de cualquier uso. Estaba después, y al
+  // ser una constante de bloque provocaba un ReferenceError que tumbaba la
+  // pantalla en los tres tipos de actividad.
+  const isMatch = activity.type === "MATCH";
+  const isDinner = activity.type === "DINNER";
+
   const me = isCoach ? null : await currentPlayer();
   // Clave del miembro que corresponde al usuario: jugador o cuerpo técnico.
   const myPlayerId = me
@@ -104,13 +110,14 @@ export default async function ActivityPage({
 
   const attMap = new Map(
     activity.attendance
-      .filter((a) => a.playerId)
-      .map((a) => [a.playerId as string, a]),
+      .filter((a) => !!a.playerId)
+      .map((a) => [a.playerId as string, a] as const),
   );
-  const staffAttMap = new Map(
+  type AttRow = (typeof activity.attendance)[number];
+  const staffAttMap = new Map<string, AttRow>(
     activity.attendance
-      .filter((a) => a.staffUserId)
-      .map((a) => [a.staffUserId as string, a]),
+      .filter((a: AttRow) => !!a.staffUserId)
+      .map((a: AttRow) => [a.staffUserId as string, a]),
   );
   const attendancePlayers = roster.map((p) => {
     const r = attMap.get(p.id);
@@ -168,8 +175,6 @@ export default async function ActivityPage({
     }
   }
 
-  const isMatch = activity.type === "MATCH";
-  const isDinner = activity.type === "DINNER";
   const attendanceClosed =
     activity.type === "TRAINING" && isTrainingAttendanceClosed(activity.date);
   const calledIds = new Set(activity.calledPlayers.map((p) => p.id));
