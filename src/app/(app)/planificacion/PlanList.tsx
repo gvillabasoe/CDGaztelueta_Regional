@@ -143,8 +143,8 @@ export function PlanList({
                       (a.type === "MATCH"
                         ? "bg-dorado/20 text-dorado"
                         : a.type === "DINNER"
-                          ? "bg-amarillo/35 text-negro"
-                          : "bg-marino/10 text-marino")
+                          ? "bg-[#6D28D9]/15 text-[#5B21B6]"
+                          : "bg-gris/15 text-gris")
                     }
                   >
                     {a.pdfPending && (
@@ -172,10 +172,10 @@ export function PlanList({
                         className={
                           "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase " +
                           (a.type === "DINNER"
-                            ? "bg-amarillo/35 text-negro"
+                            ? "bg-[#6D28D9]/15 text-[#5B21B6]"
                             : a.type === "MATCH"
-                            ? "bg-dorado/20 text-marino"
-                            : "bg-marino/10 text-marino")
+                            ? "bg-dorado/25 text-negro"
+                            : "bg-gris/15 text-gris")
                         }
                       >
                         {a.type === "MATCH"

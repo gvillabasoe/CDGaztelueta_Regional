@@ -45,6 +45,51 @@ export async function GET() {
       "tabla TeamDocument",
       () => prisma.teamDocument.findFirst({ select: { id: true } }),
     ],
+    [
+      "Activity.fileVersion",
+      () => prisma.activity.findFirst({ select: { fileVersion: true } }),
+    ],
+    [
+      "Activity.dinnerPlace (cena)",
+      () => prisma.activity.findFirst({ select: { dinnerPlace: true } }),
+    ],
+    [
+      "Activity.pollEnabled (cena)",
+      () => prisma.activity.findFirst({ select: { pollEnabled: true } }),
+    ],
+    [
+      "Attendance.staffUserId",
+      () => prisma.attendance.findFirst({ select: { staffUserId: true } }),
+    ],
+    [
+      "tabla ActivityFileView",
+      () => prisma.activityFileView.findFirst({ select: { id: true } }),
+    ],
+    ["Poll.opensAt", () => prisma.poll.findFirst({ select: { opensAt: true } })],
+    [
+      "Fine.forgiven",
+      () => prisma.fine.findFirst({ select: { forgiven: true } }),
+    ],
+    [
+      "tabla MonthlyAward",
+      () => prisma.monthlyAward.findFirst({ select: { id: true } }),
+    ],
+    [
+      "tabla LeaguePeriod",
+      () => prisma.leaguePeriod.findFirst({ select: { id: true } }),
+    ],
+    [
+      "tabla LeaguePeriodResult",
+      () => prisma.leaguePeriodResult.findFirst({ select: { id: true } }),
+    ],
+    [
+      "OfficialStanding.crestName",
+      () => prisma.officialStanding.findFirst({ select: { crestName: true } }),
+    ],
+    [
+      "tipo de actividad DINNER",
+      () => prisma.activity.count({ where: { type: "DINNER" } }),
+    ],
   ];
 
   for (const [nombre, fn] of pruebas) {

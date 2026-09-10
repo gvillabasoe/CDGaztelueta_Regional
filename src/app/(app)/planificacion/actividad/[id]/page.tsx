@@ -53,20 +53,35 @@ export default async function ActivityPage({
   });
 
   // ¿Tiene ESTE usuario el PDF de esta sesión sin consultar?
-  const pdfPendingHere = (await pendingPdfActivityIds()).has(activity.id);
+  let pdfPendingHere = false;
+  try {
+    pdfPendingHere = (await pendingPdfActivityIds()).has(activity.id);
+  } catch (err) {
+    // Un fallo del sistema de documentos no impide ver la actividad.
+    console.error("pdfPendingHere", activity.id, err);
+  }
 
   const rosterLite = roster.map((p) => ({
     id: p.id,
     name: `${p.firstName} ${p.lastName}`,
   }));
   const exIds = activity.exercises.map((e) => e.id);
-  const leagueEntries =
-    isCoach && exIds.length
-      ? await prisma.leaguePointEntry.findMany({
-          where: { exerciseId: { in: exIds } },
-          select: { exerciseId: true, playerId: true, points: true, note: true },
-        })
-      : [];
+  let leagueEntries: {
+    exerciseId: string | null;
+    playerId: string;
+    points: number;
+    note: string | null;
+  }[] = [];
+  if (isCoach && exIds.length) {
+    try {
+      leagueEntries = await prisma.leaguePointEntry.findMany({
+        where: { exerciseId: { in: exIds } },
+        select: { exerciseId: true, playerId: true, points: true, note: true },
+      });
+    } catch (err) {
+      console.error("leagueEntries", err);
+    }
+  }
   const entriesByExercise: Record<
     string,
     { playerId: string; points: number; note: string | null }[]
@@ -109,6 +124,7 @@ export default async function ActivityPage({
 
   // En la cena de equipo la asistencia incluye al cuerpo técnico convocado.
   if (isDinner) {
+    try {
     const staff = await prisma.user.findMany({
       where: { role: "COACH" },
       orderBy: [{ displayName: "asc" }, { username: "asc" }],
@@ -137,6 +153,11 @@ export default async function ActivityPage({
           ? formatDateTimeShort(r.modifiedAt)
           : null,
       });
+    }
+    } catch (err) {
+      // Si falla la carga del cuerpo técnico, la cena se abre igualmente con
+      // los jugadores.
+      console.error("staff de la cena", activity.id, err);
     }
   }
 
@@ -240,8 +261,8 @@ export default async function ActivityPage({
       )}
 
       {isDinner && (
-        <section className="card p-4">
-          <p className="chip mb-2 bg-amarillo/35 text-[11px] font-bold text-negro">
+        <section className="card border-l-4 border-[#6D28D9] p-4">
+          <p className="chip mb-2 bg-[#6D28D9]/15 text-[11px] font-bold text-[#5B21B6]">
             <span aria-hidden>🎉</span> JORNADA NOCTURNA
           </p>
           <h2 className="font-display text-lg font-semibold text-negro">
@@ -279,7 +300,7 @@ export default async function ActivityPage({
             </p>
           )}
           {activity.pollEnabled && (
-            <p className="mt-2 inline-block rounded-lg bg-amarillo/30 px-2.5 py-1 text-[11px] font-bold text-negro">
+            <p className="mt-2 inline-block rounded-lg bg-[#6D28D9]/15 px-2.5 py-1 text-[11px] font-bold text-[#5B21B6]">
               ⭐ EVENTO PUNTUABLE PARA JUGADOR DEL MES
             </p>
           )}

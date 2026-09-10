@@ -124,24 +124,22 @@ export function StandingsTable({
   const th = "px-2 py-2 text-center text-[11px] font-semibold text-gris";
   const td = "px-2 py-2 text-center text-sm";
 
-  // Zonas deportivas: se calculan SIEMPRE desde la posición actual y el número
-  // total de equipos (el descenso son los CUATRO últimos, no posiciones fijas).
-  const total = sorted.length;
+  // CLASIFICACIÓN OFICIAL (equipos): 1.º verde (Ascenso directo), 2.º amarillo
+  // (Promoción de ascenso) y del 3.º hasta el último, fondo normal.
+  // NO hay zona de descenso ni filas rojas: eso pertenecía a una regla anterior
+  // que queda sustituida. Y la Zona de Castigo es exclusiva de la LIGA interna.
   const zoneOf = (pos: number) => {
-    if (pos <= 2) return "promo" as const; // ascenso directo
-    if (pos === 3) return "playoff" as const; // promoción de ascenso
-    if (total >= 5 && pos > total - 4) return "drop" as const; // 4 últimos
+    if (pos === 1) return "promo" as const;
+    if (pos === 2) return "playoff" as const;
     return null;
   };
   const ZONE_ROW: Record<string, string> = {
     promo: "bg-green-100",
     playoff: "bg-amarillo/35",
-    drop: "bg-red-100",
   };
   const ZONE_TAG: Record<string, string> = {
-    promo: "Ascenso",
-    playoff: "Promoción",
-    drop: "Descenso",
+    promo: "Ascenso directo",
+    playoff: "Promoción de ascenso",
   };
 
   return (
@@ -161,13 +159,6 @@ export function StandingsTable({
             className="inline-block h-2.5 w-2.5 rounded-full bg-amarillo"
           />
           Promoción de ascenso
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span
-            aria-hidden
-            className="inline-block h-2.5 w-2.5 rounded-full bg-red-500"
-          />
-          Descenso
         </span>
       </div>
       <div className="overflow-x-auto">

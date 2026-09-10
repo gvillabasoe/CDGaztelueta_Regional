@@ -74,7 +74,7 @@ export function PdfManager({
     try {
       const res = await fetch(href, { method: "GET" });
       if (!res.ok) {
-        setOpenErr("No se ha podido abrir el documento. Inténtalo de nuevo.");
+        setOpenErr("No se ha podido cargar este documento.");
         return;
       }
       const blob = await res.blob();
@@ -84,7 +84,7 @@ export function PdfManager({
       router.refresh();
     } catch (err) {
       console.error("abrir PDF", err);
-      setOpenErr("No se ha podido abrir el documento. Inténtalo de nuevo.");
+      setOpenErr("No se ha podido cargar este documento.");
     } finally {
       setOpening(false);
     }

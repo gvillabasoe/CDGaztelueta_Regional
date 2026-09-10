@@ -67,6 +67,7 @@ export function PlanEditor({
   const [openConv, setOpenConv] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [msg, setMsg] = React.useState<string | null>(null);
 
   const [drafts, setDrafts] = React.useState<Draft[]>(
     (initialActivities ?? []).map((a) => ({
@@ -82,6 +83,10 @@ export function PlanEditor({
       callTime: a.callTime ?? "",
       kitLocal: a.kitLocal ?? true,
       calledPlayerIds: a.calledPlayerIds ?? [],
+      dinnerPlace: a.dinnerPlace ?? "",
+      afterPlace: a.afterPlace ?? "",
+      notes: a.notes ?? "",
+      pollEnabled: a.pollEnabled ?? false,
     })),
   );
 
@@ -185,17 +190,29 @@ export function PlanEditor({
     };
 
     setSaving(true);
-    const res =
-      mode === "create"
-        ? await savePlan(payload)
-        : await updatePlan(planId!, payload);
-    setSaving(false);
-    if (!res.ok) {
-      setError(res.error);
-      return;
+    setError(null);
+    setMsg(null);
+    try {
+      const res =
+        mode === "create"
+          ? await savePlan(payload)
+          : await updatePlan(planId!, payload);
+      if (!res.ok) {
+        // Se conserva el formulario y los datos introducidos.
+        setError(res.error);
+        return;
+      }
+      setMsg("Cambios guardados y publicados.");
+      // Los jugadores ven los cambios sin reconstruir la semana.
+      router.push("/planificacion");
+      router.refresh();
+    } catch (e) {
+      console.error("guardar planificación", e);
+      setError("No se han podido guardar los cambios. Inténtalo de nuevo.");
+    } finally {
+      // El estado de carga finaliza SIEMPRE, en éxito y en error.
+      setSaving(false);
     }
-    router.push("/planificacion");
-    router.refresh();
   }
 
   const label = (p: PlayerLite) =>
@@ -226,10 +243,10 @@ export function PlanEditor({
               className={
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold " +
                 (d.type === "MATCH"
-                  ? "bg-dorado/20 text-marino"
+                  ? "bg-dorado/25 text-negro"
                   : d.type === "DINNER"
-                    ? "bg-amarillo/35 text-negro"
-                    : "bg-marino/10 text-marino")
+                    ? "bg-[#6D28D9]/15 text-[#5B21B6]"
+                    : "bg-gris/15 text-gris")
               }
             >
               {d.type === "MATCH" ? (
@@ -303,7 +320,7 @@ export function PlanEditor({
             {d.type === "DINNER" ? (
               <>
                 <div className="col-span-2">
-                  <p className="chip bg-amarillo/35 text-[11px] font-bold text-negro">
+                  <p className="chip bg-[#6D28D9]/15 text-[11px] font-bold text-[#5B21B6]">
                     <span aria-hidden>🎉</span> JORNADA NOCTURNA
                   </p>
                 </div>
@@ -477,11 +494,20 @@ export function PlanEditor({
       {error && (
         <p className="rounded-lg bg-amarillo/25 px-3 py-2 text-sm">{error}</p>
       )}
+      {msg && (
+        <p className="rounded-lg bg-green-100 px-3 py-2 text-sm font-medium text-green-700">
+          {msg}
+        </p>
+      )}
 
       <div className="sticky bottom-2 flex gap-2">
         <button className="btn-primary flex-1" onClick={save} disabled={saving}>
           {saving && <Loader2 size={16} className="animate-spin" />}
-          {published ? "Guardar y publicar" : "Guardar"}
+          {saving
+            ? "Guardando cambios…"
+            : published
+              ? "GUARDAR Y PUBLICAR"
+              : "Guardar"}
         </button>
         <button
           className="btn-ghost"

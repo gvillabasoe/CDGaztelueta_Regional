@@ -59,67 +59,51 @@ export function LeagueList({
     );
   }
 
-  // Zonas de la clasificación interna: se calculan SIEMPRE desde la posición
-  // actual (nunca se guardan). 1.º verde (Ascenso), 2.º amarillo (Promoción de
-  // ascenso) y desde el 3.º hasta el último, fondo normal.
-  const ZONE = [
-    {
-      label: "ASCENSO",
-      row: "bg-green-100 border border-green-500 shadow-card",
-      text: "text-green-900",
-      dot: "bg-green-600",
-    },
-    {
-      label: "PROMOCIÓN DE ASCENSO",
-      row: "bg-amarillo/40 border border-dorado shadow-card",
-      text: "text-[#4A3B08]",
-      dot: "bg-amarillo",
-    },
-  ];
+  // LIGA INTERNA (jugadores, ejercicios puntuables): del 1.º al 10.º fondo
+  // normal; desde el 11.º hasta el último, rojo claro (Zona de Castigo).
+  // Aquí NO hay ascenso ni promoción: esos colores son solo de la
+  // clasificación oficial de HOME.
+  const PUNISHMENT_FROM = 11;
 
   return (
     <div className="space-y-2">
-      {/* Leyenda: el estado no se comunica solo con color */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-gris/20 bg-beige/40 px-3 py-2 text-[11px] text-negro">
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="inline-block h-2.5 w-2.5 rounded-full bg-green-600"
-          />
-          Ascenso
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="inline-block h-2.5 w-2.5 rounded-full bg-amarillo"
-          />
-          Promoción de ascenso
-        </span>
+      {/* Regla informativa: no genera multas, deudas ni pagos */}
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-red-800">
+          <span aria-hidden>⚠</span> ZONA DE CASTIGO
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-negro">
+          Los jugadores que terminen el periodo desde la posición 11 hasta la
+          última deberán hacerse cargo de las tortillas y el picoteo para todo
+          el equipo.
+        </p>
       </div>
 
       {sorted.map((p, i) => {
-        const zone = i < 2 ? ZONE[i] : null;
+        const punished = i + 1 >= PUNISHMENT_FROM;
         return (
         <div
           key={p.id}
           className={
             "flex items-center gap-3 rounded-2xl p-3 " +
-            (zone ? zone.row : "card")
+            (punished
+              ? "border border-red-300 bg-red-50 shadow-card"
+              : "card")
           }
         >
           <div className="flex w-9 shrink-0 flex-col items-center justify-center">
             <span
               className={
-                "text-sm font-bold " + (zone ? zone.text : "text-gris")
+                "text-sm font-bold " +
+                (punished ? "text-red-700" : "text-gris")
               }
             >
               {i + 1}
             </span>
-            {zone && (
-              <span
-                aria-hidden
-                className={"mt-0.5 h-2 w-2 rounded-full " + zone.dot}
-              />
+            {punished && (
+              <span aria-hidden className="text-[13px] leading-none">
+                ⚠
+              </span>
             )}
           </div>
           <Avatar
@@ -130,14 +114,15 @@ export function LeagueList({
           <div className="min-w-0 flex-1">
             <p
               className={
-                "truncate font-semibold " + (zone ? zone.text : "text-negro")
+                "truncate font-semibold " +
+                (punished ? "text-red-900" : "text-negro")
               }
             >
               {publicName(p.nickname, p.firstName, p.lastName)}
             </p>
-            {zone && (
-              <p className={"text-[11px] font-bold uppercase " + zone.text}>
-                {zone.label}
+            {punished && (
+              <p className="text-[11px] font-bold uppercase text-red-700">
+                Zona de castigo
               </p>
             )}
           </div>
@@ -181,7 +166,7 @@ export function LeagueList({
               <span
                 className={
                   "min-w-[3rem] text-right font-display text-xl font-bold " +
-                  (zone ? zone.text : "text-marino")
+                  (punished ? "text-red-800" : "text-marino")
                 }
               >
                 {busy === p.id ? (
@@ -192,7 +177,7 @@ export function LeagueList({
                 <span
                   className={
                     "ml-1 text-[11px] font-semibold " +
-                    (zone ? zone.text : "text-gris")
+                    (punished ? "text-red-700" : "text-gris")
                   }
                 >
                   pts

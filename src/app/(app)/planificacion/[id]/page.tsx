@@ -43,6 +43,12 @@ export default async function EditarPlanPage({
     callTime: a.callTime,
     kitLocal: a.kitLocal,
     calledPlayerIds: a.calledPlayers.map((p) => p.id),
+    // Campos propios de la cena: sin esto, al editar se enviaban vacíos y el
+    // guardado fallaba en la validación.
+    dinnerPlace: a.dinnerPlace,
+    afterPlace: a.afterPlace,
+    notes: a.notes,
+    pollEnabled: a.pollEnabled,
   }));
 
   return (
