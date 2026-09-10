@@ -26,6 +26,7 @@ import { ExercisesEditor } from "./ExercisesEditor";
 import { ExerciseList } from "./ExerciseList";
 import { ScoringManager } from "./ScoringManager";
 import { PdfManager } from "./PdfManager";
+import { SectionBoundary } from "@/components/SectionBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -338,12 +339,14 @@ export default async function ActivityPage({
             horarios o el punto de encuentro.
           </p>
         )}
-        <PdfManager
-          activityId={activity.id}
-          isCoach={isCoach}
-          fileName={activity.fileName}
-          pdfPending={pdfPendingHere}
-        />
+        <SectionBoundary name="documento">
+          <PdfManager
+            activityId={activity.id}
+            isCoach={isCoach}
+            fileName={activity.fileName}
+            pdfPending={pdfPendingHere}
+          />
+        </SectionBoundary>
       </section>
       )}
 
@@ -357,7 +360,7 @@ export default async function ActivityPage({
               <h2 className="font-semibold text-negro">Ejercicios</h2>
             </div>
             {isCoach ? (
-              <>
+              <SectionBoundary name="ejercicios">
                 <ExercisesEditor
                   activityId={activity.id}
                   initial={activity.exercises.map((e) => ({
@@ -388,8 +391,9 @@ export default async function ActivityPage({
                     />
                   </div>
                 )}
-              </>
+              </SectionBoundary>
             ) : (
+              <SectionBoundary name="ejercicios">
               <ExerciseList
                 exercises={activity.exercises.map((e) => ({
                   id: e.id,
@@ -404,6 +408,7 @@ export default async function ActivityPage({
                   fileName: e.exFileName,
                 }))}
               />
+              </SectionBoundary>
             )}
           </section>
         </>
@@ -412,14 +417,16 @@ export default async function ActivityPage({
       {/* Confirmación de asistencia */}
       <section className="card p-4">
         <h2 className="mb-3 font-semibold text-negro">Asistencia</h2>
-        <AttendancePanel
-          activityId={activity.id}
-          isCoach={isCoach}
-          myPlayerId={myPlayerId}
-          players={attendancePlayers}
-          isTraining={!isMatch}
-          closed={attendanceClosed}
-        />
+        <SectionBoundary name="asistencia">
+          <AttendancePanel
+            activityId={activity.id}
+            isCoach={isCoach}
+            myPlayerId={myPlayerId}
+            players={attendancePlayers}
+            isTraining={!isMatch}
+            closed={attendanceClosed}
+          />
+        </SectionBoundary>
       </section>
 
       {/* Registro posterior (solo entrenador) */}
