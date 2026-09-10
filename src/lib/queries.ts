@@ -42,7 +42,19 @@ export async function weeklyPlans(onlyPublished: boolean) {
     orderBy: { weekStart: "desc" },
     include: {
       activities: {
-        include: {
+        // Campos explícitos: la lista NO necesita los binarios de los PDF.
+        select: {
+          id: true,
+          type: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          place: true,
+          opponent: true,
+          matchday: true,
+          callTime: true,
+          kitLocal: true,
+          fileName: true,
           _count: { select: { exercises: true } },
           calledPlayers: { select: { id: true } },
           attendance: true,
@@ -64,19 +76,120 @@ export async function weeklyPlans(onlyPublished: boolean) {
 }
 
 // Detalle completo de una actividad.
+// Detalle de una actividad. IMPORTANTE: se seleccionan campos EXPLÍCITOS para
+// no cargar nunca los binarios (fileData del PDF de la sesión ni exFileData de
+// los ejercicios). La pantalla solo necesita el NOMBRE del archivo; el contenido
+// se sirve aparte por su ruta. Cargar los binarios aquí consumía memoria de la
+// función del servidor sin ninguna necesidad.
+const ACTIVITY_DETAIL_SELECT = {
+  id: true,
+  planId: true,
+  type: true,
+  date: true,
+  startTime: true,
+  endTime: true,
+  place: true,
+  opponent: true,
+  matchday: true,
+  callTime: true,
+  kitLocal: true,
+  dinnerPlace: true,
+  afterPlace: true,
+  notes: true,
+  pollEnabled: true,
+  fileName: true,
+  fileMime: true,
+  fileVersion: true,
+  orderIndex: true,
+  plan: { select: { id: true, weekStart: true, published: true } },
+  exercises: {
+    orderBy: { orderIndex: "asc" as const },
+    select: {
+      id: true,
+      task: true,
+      description: true,
+      objective: true,
+      duration: true,
+      orderIndex: true,
+      scorable: true,
+      maxPoints: true,
+      scoringInfo: true,
+      exFileName: true,
+      exFileMime: true,
+    },
+  },
+  calledPlayers: { select: { id: true } },
+  attendance: true,
+  trainingRecord: { select: { id: true } },
+  matchRecord: { select: { id: true } },
+} as const;
+
+// Consulta mínima de respaldo: solo columnas antiguas y ninguna relación. Sirve
+// para que la pantalla se abra igualmente si una columna nueva todavía no
+// existe en la base de datos.
+const ACTIVITY_CORE_SELECT = {
+  id: true,
+  planId: true,
+  type: true,
+  date: true,
+  startTime: true,
+  endTime: true,
+  place: true,
+  opponent: true,
+  matchday: true,
+  callTime: true,
+  kitLocal: true,
+  fileName: true,
+  plan: { select: { id: true, weekStart: true, published: true } },
+} as const;
+
 export async function getActivity(id: string) {
   return prisma.activity.findUnique({
     where: { id },
-    include: {
-      plan: true,
-      exercises: { orderBy: { orderIndex: "asc" } },
-      calledPlayers: { select: { id: true } },
-      attendance: true,
-      trainingRecord: { select: { id: true } },
-      matchRecord: { select: { id: true } },
-    },
+    select: ACTIVITY_DETAIL_SELECT,
   });
 }
+
+// Devuelve el detalle completo o, si algo falla, una versión reducida marcada
+// como "degradada" para que la pantalla nunca deje de abrirse.
+export async function getActivitySafe(id: string) {
+  try {
+    const full = await getActivity(id);
+    if (full) return { activity: full, degraded: false as const };
+  } catch (err) {
+    console.error("getActivity", id, err);
+  }
+
+  try {
+    const core = await prisma.activity.findUnique({
+      where: { id },
+      select: ACTIVITY_CORE_SELECT,
+    });
+    if (!core) return { activity: null, degraded: false as const };
+    return {
+      activity: {
+        ...core,
+        dinnerPlace: null as string | null,
+        afterPlace: null as string | null,
+        notes: null as string | null,
+        pollEnabled: false,
+        fileMime: null as string | null,
+        fileVersion: 0,
+        orderIndex: 0,
+        exercises: [] as never[],
+        calledPlayers: [] as { id: string }[],
+        attendance: [] as never[],
+        trainingRecord: null,
+        matchRecord: null,
+      },
+      degraded: true as const,
+    };
+  } catch (err) {
+    console.error("getActivitySafe", id, err);
+    return { activity: null, degraded: false as const };
+  }
+}
+
 
 // Total de jugadores (para el resumen de asistencia: GOING = total - NOT_GOING).
 export async function playerCount() {
