@@ -14,7 +14,11 @@ import {
 } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { pendingPdfActivityIds, getActivity, currentPlayer } from "@/lib/queries";
+import {
+  pendingPdfActivityIds,
+  getActivitySafe,
+  currentPlayer,
+} from "@/lib/queries";
 import { isTrainingAttendanceClosed } from "@/lib/deadlines";
 import { formatDateLong, formatDateTimeShort } from "@/lib/format";
 import { AttendancePanel } from "./AttendancePanel";
@@ -33,7 +37,9 @@ export default async function ActivityPage({
   const session = await getSession();
   const isCoach = session?.role === "COACH";
 
-  const activity = await getActivity(params.id);
+  // Nunca lanza: si algo falla, devuelve una versión reducida marcada como
+  // degradada para que la pantalla se abra igualmente.
+  const { activity, degraded } = await getActivitySafe(params.id);
   if (!activity) notFound();
   // Los jugadores solo ven actividades de planificaciones publicadas.
   if (!isCoach && !activity.plan.published) redirect("/planificacion");
@@ -258,6 +264,13 @@ export default async function ActivityPage({
             </div>
           )}
         </section>
+      )}
+
+      {degraded && (
+        <p className="rounded-lg bg-amarillo/25 px-3 py-2 text-sm text-negro">
+          Algunos datos de esta actividad no se han podido cargar. Se muestra la
+          información disponible.
+        </p>
       )}
 
       {isDinner && (
