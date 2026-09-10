@@ -27,6 +27,12 @@ export default function AppError({
         Ha ocurrido un problema al obtener los datos. Puedes volver a intentarlo
         o regresar al inicio.
       </p>
+      {error.digest && (
+        <p className="mt-2 text-[11px] text-gris">
+          Código del error: {error.digest}
+        </p>
+      )}
+
       <div className="mt-4 flex flex-col gap-2">
         <button onClick={reset} className="btn-primary w-full">
           <RefreshCw size={16} /> Volver a intentarlo
