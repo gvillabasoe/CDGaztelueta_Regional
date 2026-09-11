@@ -30,7 +30,7 @@ export async function updateTeamProfile(input: {
 }
 
 export async function setTeamImage(
-  kind: "crest" | "photo",
+  kind: "crest" | "photo" | "icon",
   file: { mime: string; dataBase64: string } | null,
 ) {
   if (!(await coach())) return { ok: false as const, error: "No autorizado." };
@@ -38,7 +38,9 @@ export async function setTeamImage(
   const data =
     kind === "crest"
       ? { crestData: bytes, crestMime: file?.mime ?? null }
-      : { photoData: bytes, photoMime: file?.mime ?? null };
+      : kind === "icon"
+        ? { iconData: bytes, iconMime: file?.mime ?? null }
+        : { photoData: bytes, photoMime: file?.mime ?? null };
   await prisma.teamProfile.upsert({
     where: { id: 1 },
     create: { id: 1, ...data },
@@ -48,5 +50,6 @@ export async function setTeamImage(
   revalidatePath("/login");
   revalidatePath("/home");
   revalidatePath("/mas/config");
+  revalidatePath("/manifest.webmanifest");
   return { ok: true as const };
 }
