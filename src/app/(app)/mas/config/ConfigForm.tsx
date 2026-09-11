@@ -31,6 +31,41 @@ async function resizeToDataUrl(file: File, max: number): Promise<string> {
   });
 }
 
+// Genera el ICONO de la aplicación: un PNG cuadrado con el escudo centrado
+// sobre el azul del club, sin deformarlo. Se hace en el navegador, así que no
+// necesita ninguna librería en el servidor.
+async function makeSquareIcon(file: File, size = 512): Promise<string | null> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = () => rej(new Error("read"));
+    r.readAsDataURL(file);
+  });
+  return new Promise<string | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(null);
+      // Fondo azul marino del club (evita transparencias en iOS).
+      ctx.fillStyle = "#16233F";
+      ctx.fillRect(0, 0, size, size);
+      // El escudo se ajusta dentro de un margen para que no toque los bordes
+      // (Android recorta los iconos en algunos dispositivos).
+      const box = size * 0.78;
+      const scale = Math.min(box / img.width, box / img.height);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
 function ImageField({
   kind,
   label,
@@ -55,6 +90,18 @@ function ImageField({
     const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
     if (m) {
       await setTeamImage(kind, { mime: m[1], dataBase64: m[2] });
+
+      // El escudo es además el icono de la aplicación: se guarda una versión
+      // cuadrada para la pantalla de inicio.
+      if (kind === "crest") {
+        try {
+          const icon = await makeSquareIcon(file);
+          const im = icon?.match(/^data:(.*?);base64,(.*)$/);
+          if (im) await setTeamImage("icon", { mime: im[1], dataBase64: im[2] });
+        } catch (err) {
+          console.error("icono de la aplicación", err);
+        }
+      }
       setBust(Date.now());
       setFailed(false);
       router.refresh();
