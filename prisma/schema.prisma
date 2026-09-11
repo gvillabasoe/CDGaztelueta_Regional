@@ -138,6 +138,10 @@ model TeamProfile {
   crestMime String?
   photoData Bytes? // fotografía de la plantilla
   photoMime String?
+  // Icono de la aplicación: versión CUADRADA del escudo, generada al subirlo.
+  // Se usa al añadir la web a la pantalla de inicio (Android e iOS).
+  iconData  Bytes?
+  iconMime  String?
   updatedAt DateTime @updatedAt
 }
 
